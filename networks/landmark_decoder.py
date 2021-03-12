@@ -8,7 +8,7 @@ import utils
 
 class LandmarkDecoder(nn.Module):
     def __init__(self, mfcc_f = 12, mfcc_stride = 4, mfcc_window = 28, landmark_dims = 6, device = 'cpu'):
-        super().__init__(LandmarkDecoder, self)
+        super(LandmarkDecoder, self).__init__()
         self.__device = device
         self.__mfcc_encoder = MFCCEncoder(input_shape = (mfcc_f, mfcc_window)).to(device)
         self.__landmark_encoder = LandmarkEncoder(input_dims = landmark_dims).to(device)
@@ -47,7 +47,7 @@ class LandmarkDecoder(nn.Module):
         mfcc = torch.cat(parts, dim = 3)
         mfcc_array = []
         for i in range(t_frames):
-            offset = i*self.__mfcc_window
+            offset = i*self.__mfcc_stride
             chunk = mfcc[:,:,:,offset:(offset + self.__mfcc_window)]
             chunk = self.__mfcc_encoder(chunk)
             chunk = torch.cat([chunk, landmark_feature], dim = 1)
@@ -62,3 +62,10 @@ class LandmarkDecoder(nn.Module):
             out_array.append(t_feature.unsqueeze(1))
         out_array = torch.cat(out_array, dim = 1)
         return out_array
+
+if __name__ == "__main__":
+    ldec = LandmarkDecoder()
+    landmark = torch.ones(7, 6)
+    mfcc = torch.ones(7, 1, 12, 75*4)
+    out = ldec(landmark, mfcc)
+    print(out.shape)
