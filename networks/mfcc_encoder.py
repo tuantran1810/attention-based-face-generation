@@ -1,13 +1,12 @@
 import sys, os
 sys.path.append(os.path.dirname(__file__))
-import math
 import torch
 from torch import nn
 from nets import Conv2dBlock, LinearBlock
 import utils
 
 class MFCCEncoder(nn.Module):
-    def __init__(self, in_channels = 1, start_hidden_channels = 32, input_shape = (12, 28), output_features = 6, device = 'cpu'):
+    def __init__(self, in_channels = 1, start_hidden_channels = 32, input_shape = (12, 28), output_features = 256, device = 'cpu'):
         super(MFCCEncoder, self).__init__()
         f, t = input_shape
         conv_layers = [
@@ -38,15 +37,14 @@ class MFCCEncoder(nn.Module):
 
         features = channels * f * t
         if features < 1024:
-            raise Exception("do not have enough feature for linear layers")
+            raise Exception("do not have enough features for linear layers")
 
         linear_layers = [
             LinearBlock(features, 1024),
             LinearBlock(1024, 512),
-            LinearBlock(512, 256),
         ]
         linear_layers.extend([
-            nn.Linear(256, output_features),
+            nn.Linear(512, output_features),
             nn.BatchNorm1d(output_features),
             nn.Tanh(),
         ])
