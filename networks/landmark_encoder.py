@@ -4,9 +4,9 @@ import torch
 from torch import nn
 from nets import LinearBlock
 
-class LandmarkEncoder(nn.Module):
+class PCALandmarkEncoder(nn.Module):
     def __init__(self, input_dims = 6, start_hidden_dims = 256, n_layers = 2, device = 'cpu'):
-        super(LandmarkEncoder, self).__init__()
+        super(PCALandmarkEncoder, self).__init__()
         layers = [LinearBlock(input_dims, start_hidden_dims)]
         dims = start_hidden_dims
         for i in range(n_layers - 2):
@@ -29,7 +29,7 @@ class LandmarkEncoder(nn.Module):
         return self.__layers(x)
 
 if __name__ == "__main__":
-    model = LandmarkEncoder()
+    model = PCALandmarkEncoder()
     x = torch.ones(10, 6)
     y = model(x)
     print(y.shape)
