@@ -39,6 +39,28 @@ class Conv3dBlock(nn.Module):
     def forward(self, x):
         return self.blocks(x)
 
+class Resnet2dBlock(nn.Module):
+    def __init__(self, channels, use_dropout = True, use_bias = True):
+        super(Resnet2dBlock, self).__init__()
+        layers = [
+            nn.ReplicationPad2d(1),
+            nn.Conv2d(channels, channels, kernel_size = 3, padding = 0, bias = use_bias),
+            nn.BatchNorm2d(channels),
+            nn.ReLU(inplace = True),
+        ]
+        if use_bias:
+            layers.append(nn.Dropout(0.5))
+        layers.extend([
+            nn.ReplicationPad2d(1),
+            nn.Conv2d(channels, channels, kernel_size = 3, padding = 0, bias = use_bias),
+            nn.BatchNorm2d(channels),
+        ])
+
+        self.blocks = nn.Sequential(*layers)
+    
+    def forward(self, x):
+        return x + self.blocks(x)
+
 class Resnet3dBlock(nn.Module):
     def __init__(self, channels, use_dropout = True, use_bias = True):
         super(Resnet3dBlock, self).__init__()
