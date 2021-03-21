@@ -149,13 +149,7 @@ class FaceLandmarkDetector(object):
         output_frames = self.__resize_batch(cropped_faces, size).transpose(0,3,1,2)
         lm_frames = self.__resize_batch(cropped_faces, (self.__landmark_size, self.__landmark_size)).transpose(0,3,1,2)
         landmarks = self.__landmark_detector.infer_numpy(lm_frames)
-        nframes = frames.shape[0]
-        nlandmarks = 68
-        size_np = np.array(size).reshape(1,2).repeat(nlandmarks, 0)
-        size_np = np.expand_dims(size_np, 0).repeat(nframes, 0)
-        landmarks = landmarks * size_np
-
-        return output_frames.astype(np.uint8), landmarks.astype(np.uint8)
+        return output_frames.astype(np.uint8), landmarks
 
     def __sound_mfcc(self, audio_path, nframes = 75):
         sr, audio = scipy.io.wavfile.read(audio_path)
@@ -205,7 +199,7 @@ def main():
     d = FaceLandmarkDetector(
         videorootfolder = "/media/tuantran/raid-data/dataset/GRID/video",
         audiorootfolder = "/media/tuantran/raid-data/dataset/GRID/audio_50",
-        outputfolder = "/media/tuantran/raid-data/dataset/GRID/face_images_128_128",
+        outputfolder = "/media/tuantran/rapid-data/dataset/GRID/face_images_128",
     )
     d.run()
 

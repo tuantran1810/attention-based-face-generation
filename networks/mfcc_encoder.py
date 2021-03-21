@@ -3,7 +3,7 @@ sys.path.append(os.path.dirname(__file__))
 import torch
 from torch import nn
 from nets import Conv2dBlock, LinearBlock
-import utils
+import net_utils
 
 class MFCCEncoder(nn.Module):
     def __init__(self, in_channels = 1, start_hidden_channels = 32, input_shape = (12, 28), output_features = 256, device = 'cpu'):
@@ -30,9 +30,9 @@ class MFCCEncoder(nn.Module):
                 Conv2dBlock(in_channels = channels, out_channels = channels*2, kernel = kernel, stride = stride, padding = padding),
             )
             if f > 4:
-                f = utils.conv_output(size = f, kernel = kernel, stride = stride_f, padding = padding)
+                f = net_utils.conv_output(size = f, kernel = kernel, stride = stride_f, padding = padding)
             if t > 4:
-                t = utils.conv_output(size = t, kernel = kernel, stride = stride_t, padding = padding)
+                t = net_utils.conv_output(size = t, kernel = kernel, stride = stride_t, padding = padding)
             channels *= 2
 
         features = channels * f * t
