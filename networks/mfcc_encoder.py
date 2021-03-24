@@ -40,12 +40,11 @@ class MFCCEncoder(nn.Module):
             raise Exception("do not have enough features for linear layers")
 
         linear_layers = [
-            LinearBlock(features, 1024),
-            LinearBlock(1024, 512),
+            LinearBlock(features, 1024, norm = None),
+            LinearBlock(1024, 512, norm = None),
         ]
         linear_layers.extend([
             nn.Linear(512, output_features),
-            nn.BatchNorm1d(output_features),
             nn.Tanh(),
         ])
         self.__device = device

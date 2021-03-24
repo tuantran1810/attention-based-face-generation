@@ -9,7 +9,7 @@ class DataPCACalculator(object):
         self,
         preprocessed_data = "./preprocessed",
         ext = "gzip",
-        output_file = "./preprocessed/grid_pca.pkl"
+        output_file = "./preprocessed/mfcc_landmark.pkl"
     ):
         '''
         self.__paths: map[identity]pathsList
@@ -25,21 +25,6 @@ class DataPCACalculator(object):
 
         self.__output_file = output_file
 
-    def __pca_map(self, data, components):
-        pca = PCA(n_components = components, copy = True)
-        final = pca.fit(data)
-        mp = {}
-        mp["components"] = final.components_
-        mp["explained_variance"] = final.explained_variance_
-        mp["explained_variance_ratio"] = final.explained_variance_ratio_
-        mp["singular_values"] = final.singular_values_
-        mp["mean"] = final.mean_
-        mp["n_components"] = final.n_components_
-        mp["n_features"] = final.n_features_
-        mp["n_samples"] = final.n_samples_
-        mp["noise_variance"] = final.noise_variance_
-        return mp
-
     def run(self):
         lst = []
         total = len(self.__paths)
@@ -47,20 +32,16 @@ class DataPCACalculator(object):
         for i, file in enumerate(self.__paths):
             mp = load(file, compression = 'gzip', set_default_extension = False)
             landmarks = mp['landmarks']
-            frames = landmarks.shape[0]
-            landmarks = landmarks.reshape(frames, -1)
-            lst.append(landmarks)
+            mfcc = mp['mfcc']
+            tmp = {}
+            tmp['landmarks'] = landmarks
+            tmp['mfcc'] = mfcc
+            lst.append(tmp)
             if (i+1) % one_percent == 0:
                 print("{} percent".format((i+1)/one_percent))
 
-        final = np.concatenate(lst, axis = 0)
-        print(final.shape)
-        mp = {}
-        for i in range(6, 30):
-            mp[i] = self.__pca_map(final, i)
-
         with open(self.__output_file, "wb") as fd:
-            dump(mp, fd)
+            dump(lst, fd)
 
 
 def main():

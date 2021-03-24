@@ -7,14 +7,13 @@ from nets import LinearBlock
 class PCALandmarkEncoder(nn.Module):
     def __init__(self, input_dims = 6, start_hidden_dims = 256, n_layers = 2, device = 'cpu'):
         super(PCALandmarkEncoder, self).__init__()
-        layers = [LinearBlock(input_dims, start_hidden_dims)]
+        layers = [LinearBlock(input_dims, start_hidden_dims, norm = None)]
         dims = start_hidden_dims
         for i in range(n_layers - 2):
-            layers.append(LinearBlock(dims, dims*2))
+            layers.append(LinearBlock(dims, dims*2, norm = None))
             dims *= 2
         layers.extend([
             nn.Linear(dims, dims*2),
-            nn.BatchNorm1d(dims*2),
             nn.Tanh(),
         ])
         self.__layers = nn.Sequential(*layers).to(device)

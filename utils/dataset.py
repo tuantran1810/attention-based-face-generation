@@ -14,3 +14,15 @@ class PathDataset(Dataset):
         path = self.__data_paths[index]
         with open(path, "rb") as fd:
             return self.__post_processing(fd)
+
+class ArrayDataset(Dataset):
+    def __init__(self, array, post_processing):
+        self.__data = array
+        self.__post_processing  = post_processing
+
+    def __len__(self):
+        return len(self.__data)
+
+    def __getitem__(self, index):
+        data = self.__data[index]
+        return self.__post_processing(data)

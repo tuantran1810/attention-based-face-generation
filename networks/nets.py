@@ -4,40 +4,43 @@ import torch
 from torch import nn
 
 class Conv1dBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel, stride = 1, padding = 0):
+    def __init__(self, in_channels, out_channels, kernel, stride = 1, padding = 0, norm = nn.BatchNorm1d, activation = nn.ReLU):
         super(Conv1dBlock, self).__init__()
-        self.blocks = nn.Sequential(
-            nn.Conv1d(in_channels, out_channels, kernel, stride, padding),
-            nn.BatchNorm1d(out_channels),
-            nn.ReLU(inplace = True),
-        )
+        layers = [nn.Conv1d(in_channels, out_channels, kernel, stride, padding)]
+        if norm is not None:
+            layers.append(norm(out_channels))
+        if activation is not None:
+            layers.append(activation())
+        self.__layers = nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.blocks(x)
+        return self.__layers(x)
 
 class Conv2dBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel, stride = 1, padding = 0):
+    def __init__(self, in_channels, out_channels, kernel, stride = 1, padding = 0, norm = nn.BatchNorm2d, activation = nn.ReLU):
         super(Conv2dBlock, self).__init__()
-        self.blocks = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel, stride, padding),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace = True),
-        )
+        layers = [nn.Conv2d(in_channels, out_channels, kernel, stride, padding)]
+        if norm is not None:
+            layers.append(norm(out_channels))
+        if activation is not None:
+            layers.append(activation())
+        self.__layers = nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.blocks(x)
+        return self.__layers(x)
 
 class Conv3dBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel, stride = 1, padding = 0):
+    def __init__(self, in_channels, out_channels, kernel, stride = 1, padding = 0, norm = nn.BatchNorm3d, activation = nn.ReLU):
         super(Conv3dBlock, self).__init__()
-        self.blocks = nn.Sequential(
-            nn.Conv3d(in_channels, out_channels, kernel, stride, padding),
-            nn.BatchNorm3d(out_channels),
-            nn.ReLU(inplace = True),
-        )
+        layers = [nn.Conv3d(in_channels, out_channels, kernel, stride, padding)]
+        if norm is not None:
+            layers.append(norm(out_channels))
+        if activation is not None:
+            layers.append(activation())
+        self.__layers = nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.blocks(x)
+        return self.__layers(x)
 
 class Resnet2dBlock(nn.Module):
     def __init__(self, channels, use_dropout = True, use_bias = True):
@@ -84,28 +87,30 @@ class Resnet3dBlock(nn.Module):
         return x + self.blocks(x)
 
 class Deconv2dBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel, stride = 1, padding = 0, dilation = 1, output_padding = 0):
+    def __init__(self, in_channels, out_channels, kernel, stride = 1, padding = 0, dilation = 1, output_padding = 0, norm = nn.BatchNorm2d, activation = nn.ReLU):
         super(Deconv2dBlock, self).__init__()
-        self.blocks = nn.Sequential(
-            nn.ConvTranspose2d(in_channels, out_channels, kernel, stride, padding, dilation = dilation, output_padding = output_padding),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace = True),
-        )
+        layers = [nn.ConvTranspose2d(in_channels, out_channels, kernel, stride, padding, dilation = dilation, output_padding = output_padding)]
+        if norm is not None:
+            layers.append(norm(out_channels))
+        if activation is not None:
+            layers.append(activation())
+        self.__layers = nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.blocks(x)
+        return self.__layers(x)
 
 class Deconv3dBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel, stride = 1, padding = 0, dilation = 1, output_padding = 0):
+    def __init__(self, in_channels, out_channels, kernel, stride = 1, padding = 0, dilation = 1, output_padding = 0, norm = nn.BatchNorm3d, activation = nn.ReLU):
         super(Deconv3dBlock, self).__init__()
-        self.blocks = nn.Sequential(
-            nn.ConvTranspose3d(in_channels, out_channels, kernel, stride, padding, dilation = dilation, output_padding = output_padding),
-            nn.BatchNorm3d(out_channels),
-            nn.ReLU(inplace = True),
-        )
+        layers = [nn.ConvTranspose3d(in_channels, out_channels, kernel, stride, padding, dilation = dilation, output_padding = output_padding)]
+        if norm is not None:
+            layers.append(norm(out_channels))
+        if activation is not None:
+            layers.append(activation())
+        self.__layers = nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.blocks(x)
+        return self.__layers(x)
 
 class Unet2dBlock(nn.Module):
     def __init__(self, in_channels, skip_channels, out_channels, kernel, skip_kernel = 3, stride = 1, padding = 0, dilation = 1, output_padding = 0):
@@ -137,13 +142,14 @@ class Unet2dBlock(nn.Module):
         return x
 
 class LinearBlock(nn.Module):
-    def __init__(self, input_dims, output_dims):
+    def __init__(self, input_dims, output_dims, norm = nn.BatchNorm1d, activation = nn.ReLU):
         super(LinearBlock, self).__init__()
-        self.__layers = nn.Sequential(
-            nn.Linear(input_dims, output_dims),
-            nn.BatchNorm1d(output_dims),
-            nn.ReLU(inplace = True),
-        )
+        layers = [nn.Linear(input_dims, output_dims)]
+        if norm is not None:
+            layers.append(norm(output_dims))
+        if activation is not None:
+            layers.append(activation())
+        self.__layers = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.__layers(x)

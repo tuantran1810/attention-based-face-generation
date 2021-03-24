@@ -3,13 +3,12 @@ sys.path.append(os.path.dirname(__file__))
 import random
 import torch
 import pickle
-import compress_pickle
 from torch import nn, optim
 from torch.utils.data import DataLoader
 import numpy as np
 from framework.common_trainer import CommonTrainer
 from networks.trainer_interface import LandmarkDecoderTrainerInterface, LandmarkMSELoss
-from utils.path_dataset import PathDataset
+from utils.dataset import ArrayDataset
 from tqdm import tqdm
 from pathlib import Path
 from loguru import logger as log
@@ -19,10 +18,12 @@ class LandmarkPredictorTrainer():
     def __init__(self,
         epochs = 10,
         epoch_offset = 1,
-        batchsize = 32,
+        batchsize = 150,
         lr = 0.0001,
+        landmark_features = 6,
         landmark_pca_path = "./grid_dataset/preprocessed/grid_pca.pkl",
-        data_path = "/media/tuantran/rapid-data/dataset/GRID/face_images_128",
+        mfcc_norm_path = "./grid_dataset/preprocessed/grid_mfcc_norm.pkl",
+        data_path = "/media/tuantran/rapid-data/dataset/GRID/face_images_128/mfcc_landmark.pkl",
         output_path = "./landmark_decoder_output",
         device = "cpu"
     ):
@@ -35,68 +36,73 @@ class LandmarkPredictorTrainer():
             landmark_pca_metadata = pickle.load(fd)
         if landmark_pca_metadata is None:
             raise Exception("cannot load pca metadata")
-
+        landmark_pca_metadata = landmark_pca_metadata[landmark_features]
         self.__landmark_pca_mean = torch.tensor(landmark_pca_metadata["mean"]).to(device)
         self.__landmark_pca_components = torch.tensor(landmark_pca_metadata["components"]).to(device)
 
+        mp = None
+        with open(mfcc_norm_path, 'rb') as fd:
+            mp = pickle.load(fd)
+        if mp is None:
+            raise Exception("cannot load pca metadata")
+        self.__mfcc_max_value = mp['max']
+        self.__mfcc_min_value = mp['min']
+
         self.__train_dataloader, self.__test_dataloader = self.__create_dataloader(data_path, batchsize)
-        model = LandmarkDecoderTrainerInterface(self.__landmark_pca_mean, self.__landmark_pca_components, device = device)
-        loss_weight = torch.cat([torch.ones(37), 10*torch.ones(31)]).unsqueeze(1)
-        loss_weight = loss_weight.repeat(1, 2).reshape(-1)
+        model = LandmarkDecoderTrainerInterface(landmark_features, self.__landmark_pca_mean, self.__landmark_pca_components, device = device)
+        loss_weight = torch.ones(6)
 
         self.__trainer.inject_model(
             model,
         ).inject_optim(
             optim.Adam(model.parameters(), lr = lr)
         ).inject_loss_function(
-            LandmarkMSELoss(self.__landmark_pca_mean, self.__landmark_pca_components, weight = loss_weight, y_padding = 3, device = device)
+            LandmarkMSELoss(self.__landmark_pca_mean, self.__landmark_pca_components.transpose(0, 1), weight = loss_weight, y_padding = 3, device = device)
         ).inject_train_dataloader(
             self.__produce_train_data
         ).inject_test_dataloader(
             self.__produce_test_data
-        ).inject_save_model_callback(
-            self.__save_model
         ).inject_evaluation_callback(
             self.__save_evaluation_data
+        ).inject_save_model_callback(
+            self.__save_model
         )
+    def __create_dataloader(self, datapath, batchsize, training_percentage = 95):
+        data = None
+        with open(datapath, 'rb') as fd:
+            data = pickle.load(fd)
+        if data is None:
+            raise Exception("cannot load training data")
 
-    def __create_dataloader(self, rootpath, batchsize, training_percentage = 95):
-        data_paths = list()
-        for path, _ , files in os.walk(rootpath):
-            for name in files:
-                ext = name.split('.')[-1]
-                if ext != 'gzip':
-                    continue
-                data_paths.append(os.path.join(path, name))
-        random.shuffle(data_paths)
-        total_paths = len(data_paths)
-        n_training = int(total_paths * (training_percentage/100.0))
-        training_paths = data_paths[:n_training]
-        testing_paths = data_paths[n_training:]
+        random.shuffle(data)
+        total_data = len(data)
+        n_training = int(total_data * (training_percentage/100.0))
+        training = data[:n_training]
+        testing = data[n_training:]
 
-        def data_processing(fd):
-            data = compress_pickle.load(fd, compression = 'gzip', set_default_extension = False)
-            mfcc = data['mfcc']
+        def data_processing(item):
+            mfcc = item['mfcc']
+            mfcc = (mfcc - self.__mfcc_min_value) / (self.__mfcc_max_value - self.__mfcc_min_value)
             mfcc = torch.tensor(mfcc).float()
             f = mfcc.shape[1]
-            mfcc = mfcc.transpose(0,1).reshape(f, -1).unsqueeze(0)
+            mfcc = mfcc.transpose(0, 1).reshape(f, -1).unsqueeze(0)
 
-            landmarks = data['landmarks']
+            landmarks = item['landmarks']
             frames = landmarks.shape[0]
             landmarks = landmarks.reshape(frames, -1)
+            landmarks = torch.tensor(landmarks)
 
-            r = random.choice([x for x in range(frames)])
-            inspired_landmark = landmarks[r,:]
+            inspired_landmark = landmarks[0,:]
 
-            return ((inspired_landmark, mfcc), landmarks)
+            return ((mfcc, inspired_landmark), landmarks)
 
-        train_dataset = PathDataset(training_paths, data_processing)
-        test_dataset = PathDataset(testing_paths, data_processing)
+        train_dataset = ArrayDataset(training, data_processing)
+        test_dataset = ArrayDataset(testing, data_processing)
         params = {
             'batch_size': batchsize,
             'shuffle': True,
             'num_workers': 6,
-            'drop_last': True,
+            'drop_last': False,
         }
         return DataLoader(train_dataset, **params), DataLoader(test_dataset, **params)
 
@@ -106,7 +112,7 @@ class LandmarkPredictorTrainer():
             mfcc = mfcc.to(self.__device)
             inspired_landmark = inspired_landmark.to(self.__device)
             landmarks = landmarks.to(self.__device)
-            yield ((inspired_landmark, mfcc), landmarks)
+            yield ((mfcc, inspired_landmark), landmarks)
 
     def __produce_test_data(self):
         loader = tqdm(self.__test_dataloader, desc = "Testing")
@@ -114,7 +120,7 @@ class LandmarkPredictorTrainer():
             mfcc = mfcc.to(self.__device)
             inspired_landmark = inspired_landmark.to(self.__device)
             landmarks = landmarks.to(self.__device)
-            yield ((inspired_landmark, mfcc), landmarks)
+            yield ((mfcc, inspired_landmark), landmarks)
 
     def __save_model(self, epoch, model):
         log.info(f"saving model for epoch {epoch}")
@@ -148,6 +154,7 @@ class LandmarkPredictorTrainer():
             fig.set_figheight(7)
             fig.set_figwidth(10)
             plt.savefig(image_path, dpi = 500)
+
     def start(self):
         self.__trainer.train()
 

@@ -126,14 +126,15 @@ class CommonTrainer:
                 continue
 
             self.__log("start evaluating model")
-            self.__model.eval()
-            loss_arr = []
-            metrics = dict()
-            for i, (x, y) in enumerate(self.__test_dataloader()):
-                yhat = self.__model(x)
-                loss = self.__loss_function(yhat, y).detach()
-                loss_arr.append(loss)
-                if self.__evaluation_callback is not None:
-                    self.__evaluation_callback(epoch, i, x, y, yhat)
-            metrics["evaluation_loss"] = sum(loss_arr) / len(loss_arr)
-            self.__metric_log(epoch, -1, metrics)
+            with torch.no_grad():
+                self.__model.eval()
+                loss_arr = []
+                metrics = dict()
+                for i, (x, y) in enumerate(self.__test_dataloader()):
+                    yhat = self.__model(x)
+                    loss = self.__loss_function(yhat, y).detach()
+                    loss_arr.append(loss)
+                    if self.__evaluation_callback is not None:
+                        self.__evaluation_callback(epoch, i, x, y, yhat)
+                metrics["evaluation_loss"] = sum(loss_arr) / len(loss_arr)
+                self.__metric_log(epoch, -1, metrics)

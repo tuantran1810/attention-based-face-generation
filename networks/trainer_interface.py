@@ -6,8 +6,8 @@ from torch.nn import functional as F
 from landmark_decoder import LandmarkDecoder
 
 class LandmarkDecoderTrainerInterface(LandmarkDecoder):
-    def __init__(self, pca_mean, pca_components, device = "cpu"):
-        super().__init__(device = device)
+    def __init__(self, pca_dims, pca_mean, pca_components, device = "cpu"):
+        super().__init__(landmark_dims = pca_dims, device = device)
         self.__pca_mean = pca_mean.to(device).unsqueeze(0)
         self.__pca_components = pca_components.transpose(0, 1).to(device)
         self.__device = device
@@ -31,7 +31,7 @@ class LandmarkMSELoss(nn.Module):
     def __init__(self, pca_mean, pca_components, weight, y_padding, device = "cpu"):
         super(LandmarkMSELoss, self).__init__()
         self.__pca_mean = pca_mean.to(device).unsqueeze(0)
-        self.__inverse_pca_components = pca_components.to(device)
+        self.__pca_components = pca_components.to(device)
         self.__weight = weight.to(device)
         self.__device = device
         self.__y_padding = y_padding
@@ -43,6 +43,6 @@ class LandmarkMSELoss(nn.Module):
         output: loss score
         '''
         y = y[:,self.__y_padding:-self.__y_padding,:]
-        yhat = torch.matmul(yhat, self.__inverse_pca_components) + self.__pca_mean
+        y = torch.matmul(y - self.__pca_mean, self.__pca_components)
         result = F.mse_loss(yhat, y, reduction = 'none') * self.__weight
         return result.mean()
