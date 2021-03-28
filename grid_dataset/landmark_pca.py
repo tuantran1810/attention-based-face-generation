@@ -1,28 +1,22 @@
 import os
 import numpy as np
 from sklearn.decomposition import PCA
-from compress_pickle import load
-from pickle import dump
+from pickle import dump, load
+from tqdm import tqdm
 
 class DataPCACalculator(object):
     def __init__(
         self,
-        preprocessed_data = "./preprocessed",
-        ext = "gzip",
-        output_file = "./preprocessed/grid_pca.pkl"
+        landmarks_data = "./preprocessed/raw_landmark.pkl",
+        output_file = "./preprocessed/landmark_pca.pkl"
     ):
         '''
         self.__paths: map[identity]pathsList
         '''
 
-        self.__paths = []
-
-        for path, _ , files in os.walk(preprocessed_data):
-            for name in files:
-                code, file_ext = name.split('.')
-                if file_ext == ext:
-                    self.__paths.append(os.path.join(path, name))
-
+        self.__landmark_map = None
+        with open(landmarks_data, 'rb') as fd:
+            self.__landmark_map = load(fd)
         self.__output_file = output_file
 
     def __pca_map(self, data, components):
@@ -42,21 +36,15 @@ class DataPCACalculator(object):
 
     def run(self):
         lst = []
-        total = len(self.__paths)
-        one_percent = int(total / 100)
-        for i, file in enumerate(self.__paths):
-            mp = load(file, compression = 'gzip', set_default_extension = False)
-            landmarks = mp['landmarks']
-            frames = landmarks.shape[0]
-            landmarks = landmarks.reshape(frames, -1)
-            lst.append(landmarks)
-            if (i+1) % one_percent == 0:
-                print("{} percent".format((i+1)/one_percent))
+        for k, lmp in self.__landmark_map.items():
+            for _, landmarks in lmp.items():
+                frames = landmarks.shape[0]
+                landmarks = landmarks.reshape(frames, -1)
+                lst.append(landmarks)
 
         final = np.concatenate(lst, axis = 0)
-        print(final.shape)
         mp = {}
-        for i in range(6, 30):
+        for i in tqdm(range(6, 31), desc = 'PCA'):
             mp[i] = self.__pca_map(final, i)
 
         with open(self.__output_file, "wb") as fd:
@@ -64,7 +52,9 @@ class DataPCACalculator(object):
 
 
 def main():
-    d = DataPCACalculator(preprocessed_data = "/media/tuantran/rapid-data/dataset/GRID/face_images_128")
+    d = DataPCACalculator(
+        landmarks_data = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
+    )
     d.run()
 
 if __name__ == "__main__":

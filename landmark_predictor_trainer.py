@@ -1,8 +1,5 @@
-import sys, os
+import sys, os, random, torch, pickle
 sys.path.append(os.path.dirname(__file__))
-import random
-import torch
-import pickle
 from torch import nn, optim
 from torch.utils.data import DataLoader
 import numpy as np
@@ -21,9 +18,10 @@ class LandmarkPredictorTrainer():
         batchsize = 200,
         lr = 0.00001,
         landmark_features = 6,
-        landmark_pca_path = "./grid_dataset/preprocessed/grid_pca.pkl",
+        landmark_pca_path = "./grid_dataset/preprocessed/landmark_pca.pkl",
         mfcc_norm_path = "./grid_dataset/preprocessed/grid_mfcc_norm.pkl",
-        data_path = "/media/tuantran/rapid-data/dataset/GRID/face_images_128/mfcc_landmark.pkl",
+        landmark_path = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
+        mfcc_path = "/media/tuantran/raid-data/dataset/GRID/audio_50/mfcc_data.pkl",
         output_path = "./landmark_decoder_output",
         device = "cpu"
     ):
@@ -48,7 +46,7 @@ class LandmarkPredictorTrainer():
         self.__mfcc_max_value = mp['max']
         self.__mfcc_min_value = mp['min']
 
-        self.__train_dataloader, self.__test_dataloader = self.__create_dataloader(data_path, batchsize)
+        self.__train_dataloader, self.__test_dataloader = self.__create_dataloader(landmark_path, mfcc_path, batchsize)
         model = LandmarkDecoderTrainerInterface(landmark_features, self.__landmark_pca_mean, self.__landmark_pca_components, device = device)
 
         self.__trainer.inject_model(
@@ -67,12 +65,23 @@ class LandmarkPredictorTrainer():
             self.__save_model
         )
 
-    def __create_dataloader(self, datapath, batchsize, training_percentage = 95):
-        data = None
-        with open(datapath, 'rb') as fd:
-            data = pickle.load(fd)
-        if data is None:
-            raise Exception("cannot load training data")
+    def __create_dataloader(self, landmarkpath, mfccpath, batchsize, training_percentage = 95):
+        landmark_data = None
+        with open(landmarkpath, 'rb') as fd:
+            landmark_data = pickle.load(fd)
+
+        mfcc_data = None
+        with open(mfccpath, 'rb') as fd:
+            mfcc_data = pickle.load(fd)
+
+
+        data = []
+        for identity, idmap in landmark_data.items():
+            for code, lm in idmap.items():
+                data.append({
+                    'landmarks': lm, 
+                    'mfcc': mfcc_data[identity][code],
+                })
 
         random.shuffle(data)
         total_data = len(data)
