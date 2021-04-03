@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 class LandmarkPredictorTrainer():
     def __init__(self,
-        epochs = 100,
+        epochs = 20,
         epoch_offset = 1,
         batchsize = 200,
         lr = 0.0002,
@@ -131,7 +131,7 @@ class LandmarkPredictorTrainer():
             yield ((mfcc, inspired_landmark), landmarks)
 
     def __save_model(self, epoch, model):
-        if epoch < 10:
+        if epoch < 7:
             return
         log.info(f"saving model for epoch {epoch}")
         models_folder = "models"
