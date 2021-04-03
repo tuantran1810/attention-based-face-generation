@@ -39,7 +39,7 @@ class LandmarkMeanCalculator(object):
 
 def main():
     d = LandmarkMeanCalculator(
-        landmarks_data = "/media/tuantran/raid-data/dataset/GRID/standard_landmark_2.pkl",
+        landmarks_data = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
     )
     d.run()
 

@@ -11,6 +11,10 @@ from pathlib import Path
 from loguru import logger as log
 import matplotlib.pyplot as plt
 
+'''
+This training produce the test loss = 7e-4 at the 10th epoch
+'''
+
 class LandmarkPredictorTrainer():
     def __init__(self,
         epochs = 20,
