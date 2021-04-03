@@ -19,7 +19,7 @@ class LandmarkPredictorTrainer():
         lr = 0.001,
         landmark_features = 136,
         landmark_mean_path = "./grid_dataset/preprocessed/landmark_mean.pkl",
-        landmark_path = "/media/tuantran/raid-data/dataset/GRID/standard_landmark_2.pkl",
+        landmark_path = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
         mel_path = "/media/tuantran/raid-data/dataset/GRID/audio_50/mel.pkl",
         output_path = "./mel_landmark_decoder_output",
         device = "cpu"

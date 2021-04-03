@@ -60,16 +60,11 @@ class LandmarkStandardize(object):
 
     def __align_eye_points(self, landmark_sequence):
         aligned_sequence = copy.deepcopy(landmark_sequence)
-        first_landmark = aligned_sequence[0,:,:]
-        
         eyecorner_dst = [ (np.float(0.3), np.float(1/3)), (np.float(0.7), np.float(1/3)) ]
-        eyecorner_src  = [ (first_landmark[36, 0], first_landmark[36, 1]), (first_landmark[45, 0], first_landmark[45, 1]) ]
-
-        transform, _ = self.__similarity_transform(eyecorner_src, eyecorner_dst)
-
         for i, landmark in enumerate(aligned_sequence):
+            eyecorner_src  = [ (landmark[36, 0], landmark[36, 1]), (landmark[45, 0], landmark[45, 1]) ]
+            transform, _ = self.__similarity_transform(eyecorner_src, eyecorner_dst)
             aligned_sequence[i] = self.__transform_landmark(landmark, transform)
-
         return aligned_sequence
 
     def __transfer_expression(self, landmark_sequence):
@@ -101,8 +96,8 @@ class LandmarkStandardize(object):
 
 def main():
     d = LandmarkStandardize(
-        inputlandmark = "/media/tuantran/raid-data/dataset/GRID/raw_landmark_2.pkl",
-        outputpath = "/media/tuantran/raid-data/dataset/GRID/standard_landmark_2.pkl",
+        inputlandmark = "/media/tuantran/raid-data/dataset/GRID/raw_landmark.pkl",
+        outputpath = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
     )
     d.run()
 

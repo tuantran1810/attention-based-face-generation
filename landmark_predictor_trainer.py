@@ -17,10 +17,10 @@ class LandmarkPredictorTrainer():
         epoch_offset = 1,
         batchsize = 200,
         lr = 0.0002,
-        landmark_features = 6,
+        landmark_features = 7,
         landmark_pca_path = "./grid_dataset/preprocessed/landmark_pca.pkl",
         landmark_mean_path = "./grid_dataset/preprocessed/landmark_mean.pkl",
-        landmark_path = "/media/tuantran/raid-data/dataset/GRID/standard_landmark_2.pkl",
+        landmark_path = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
         mfcc_path = "/media/tuantran/raid-data/dataset/GRID/audio_50/mfcc.pkl",
         output_path = "./landmark_decoder_output",
         device = "cpu"
