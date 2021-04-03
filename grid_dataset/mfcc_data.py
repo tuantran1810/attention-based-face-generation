@@ -1,6 +1,8 @@
-import cv2, sys, os, copy, math, librosa, scipy.io.wavfile
+import cv2, sys, os, copy, math, librosa
 import numpy as np
 from pickle import dump
+import python_speech_features
+from tqdm import tqdm
 
 class MFCCData(object):
     def __init__(
@@ -26,36 +28,30 @@ class MFCCData(object):
         self.__outputpath = outputpath
 
     def __sound_mfcc(self, audio_path, nframes = 75):
-        sr, audio = scipy.io.wavfile.read(audio_path)
-        audio = audio.astype(float)
-        chunksize = len(audio) // nframes
-        output_lst = []
-        for i in range(nframes):
-            chunk = audio[i*chunksize:(i+1)*chunksize]
-            s = librosa.feature.mfcc(audio[:chunksize], sr = sr, n_mfcc = self.__sound_features, fmax = 16000)
-            s = np.expand_dims(s, axis = 0)
-            output_lst.append(s)
-        return np.concatenate(output_lst, 0)
+        audio, sr = librosa.load(audio_path, sr = 16000)
+        audio = np.append(audio, np.zeros(160))
+        mfcc = python_speech_features.mfcc(audio, 16000, winstep = 0.01)
+        return mfcc
 
     def run(self):
         final = {}
-        for identity, identity_map in self.__paths.items():
+        for identity, identity_map in tqdm(self.__paths.items()):
             if identity not in final:
                 final[identity] = {}
-            for code, path in identity_map.items():
+            for code, path in tqdm(identity_map.items()):
                 mfcc = self.__sound_mfcc(path, nframes = 75)
-                if mfcc.shape[0] != 75:
+                if mfcc.shape[0] != 300:
                     print("invalid audio: {}".format(path))
                     continue
                 final[identity][code] = mfcc
-                print("processed for : {} --- {}".format(identity, code))
-            with open(self.__outputpath, 'wb') as fd:
-                dump(final, fd)
+                # print("processed for : {} --- {}".format(identity, code))
+        with open(self.__outputpath, 'wb') as fd:
+            dump(final, fd)
 
 def main():
     d = MFCCData(
         audiorootfolder = "/media/tuantran/raid-data/dataset/GRID/audio_50",
-        outputpath = "./preprocessed/mfcc.pkl",
+        outputpath = "/media/tuantran/raid-data/dataset/GRID/audio_50/mfcc.pkl",
     )
     d.run()
 

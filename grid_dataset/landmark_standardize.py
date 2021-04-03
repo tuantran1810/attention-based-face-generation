@@ -17,8 +17,60 @@ class LandmarkStandardize(object):
         self.__input_map = {}
         with open(inputlandmark, 'rb') as fd:
             self.__input_map = load(fd)
-        self.__mean_shape = self.__input_map['mean']
         del self.__input_map['mean']
+
+        array = []
+        for identity, identity_map in self.__input_map.items():
+            for code, video_path in identity_map.items():
+                landmark = self.__input_map[identity][code]
+                landmark = np.mean(landmark, axis = 0)
+                array.append(landmark)
+        array = np.stack(array)
+        mean_face = np.mean(array, axis = 0)
+        mean_face = self.__align_eye_points(np.expand_dims(mean_face, 0))
+        mean_face = mean_face[0]
+        self.__mean_shape = mean_face
+
+    def __similarity_transform(self, in_points, out_points):
+        s60 = math.sin(60*math.pi/180)
+        c60 = math.cos(60*math.pi/180)
+
+        in_points = np.copy(in_points).tolist()
+        in_1_x, in_1_y = in_points[0]
+        in_2_x, in_2_y = in_points[1]
+        out_points = np.copy(out_points).tolist()
+        out_1_x, out_1_y = out_points[0]
+        out_2_x, out_2_y = out_points[1]
+
+        xin = c60*(in_1_x - in_2_x) - s60*(in_1_y - in_2_y) + in_2_x
+        yin = s60*(in_1_x - in_2_x) + c60*(in_1_y - in_2_y) + in_2_y
+        in_points.append([xin, yin])
+
+        xout = c60*(out_1_x - out_2_x) - s60*(out_1_y - out_2_y) + out_2_x
+        yout = s60*(out_1_x - out_2_x) + c60*(out_1_y - out_2_y) + out_2_y
+        out_points.append([xout, yout])
+
+        return cv2.estimateAffine2D(np.array([in_points]), np.array([out_points]), False)
+
+    def __transform_landmark(self, landmark, transform):
+        transformed = np.reshape(np.array(landmark), (68, 1, 2))
+        transformed = cv2.transform(transformed, transform)
+        transformed = np.float32(np.reshape(transformed, (68, 2)))
+        return transformed
+
+    def __align_eye_points(self, landmark_sequence):
+        aligned_sequence = copy.deepcopy(landmark_sequence)
+        first_landmark = aligned_sequence[0,:,:]
+        
+        eyecorner_dst = [ (np.float(0.3), np.float(1/3)), (np.float(0.7), np.float(1/3)) ]
+        eyecorner_src  = [ (first_landmark[36, 0], first_landmark[36, 1]), (first_landmark[45, 0], first_landmark[45, 1]) ]
+
+        transform, _ = self.__similarity_transform(eyecorner_src, eyecorner_dst)
+
+        for i, landmark in enumerate(aligned_sequence):
+            aligned_sequence[i] = self.__transform_landmark(landmark, transform)
+
+        return aligned_sequence
 
     def __transfer_expression(self, landmark_sequence):
         first_landmark = landmark_sequence[0,:,:]
@@ -41,6 +93,7 @@ class LandmarkStandardize(object):
         for identity, identity_map in tqdm(self.__input_map.items()):
             for code, video_path in tqdm(identity_map.items()):
                 landmarks = self.__input_map[identity][code]
+                landmarks = self.__align_eye_points(landmarks)
                 output_landmarks = self.__transfer_expression(landmarks)
                 self.__input_map[identity][code] = output_landmarks
         with open(self.__outputpath, 'wb') as fd:
@@ -48,8 +101,8 @@ class LandmarkStandardize(object):
 
 def main():
     d = LandmarkStandardize(
-        inputlandmark = "/media/tuantran/raid-data/dataset/GRID/raw_landmark.pkl",
-        outputpath = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
+        inputlandmark = "/media/tuantran/raid-data/dataset/GRID/raw_landmark_2.pkl",
+        outputpath = "/media/tuantran/raid-data/dataset/GRID/standard_landmark_2.pkl",
     )
     d.run()
 

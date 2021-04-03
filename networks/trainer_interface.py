@@ -4,6 +4,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from landmark_decoder import LandmarkDecoder
+from mel_landmark_decoder import MelLandmarkDecoder
 
 class LandmarkDecoderTrainerInterface(LandmarkDecoder):
     def __init__(self, pca_dims, pca_mean, pca_components, device = "cpu"):
@@ -44,3 +45,21 @@ class LandmarkMSELoss(nn.Module):
         # y = y[:,self.__y_padding:-self.__y_padding,:]
         y = torch.matmul(y - self.__pca_mean, self.__pca_components)
         return F.mse_loss(yhat, y)
+
+class MelLandmarkDecoderTrainerInterface(MelLandmarkDecoder):
+    def __init__(self, dims, device = "cpu"):
+        super().__init__(device = device)
+        self.__device = device
+    
+    def forward(self, input_data):
+        '''
+        input_data: [batch_mel, batch_landmarks]
+        batch_mel: (batchsize, channels, t, f) -> default: (batchsize, 1, t, 128)
+        batch_landmarks: (batchsize, dims) -> default: (batchsize, 136)
+        output: (batchsize, t, 136)
+        '''
+        mel, landmarks = input_data
+        mel = mel.to(self.__device)
+        # landmarks = landmarks.to(self.__device)
+
+        return super().forward(mel)

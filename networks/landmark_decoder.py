@@ -36,18 +36,23 @@ class LandmarkDecoder(nn.Module):
         if mfcc_t % self.__mfcc_stride != 0:
             raise Exception("invalid mfcc_t")
         t_frames = mfcc_t//self.__mfcc_stride
-        frame_padding = (self.__mfcc_window//self.__mfcc_stride)//2
+        frame_padding = 6
 
         mfcc_array = []
-        for i in range(frame_padding, t_frames - frame_padding):
-            offset = (i - frame_padding)*self.__mfcc_stride
+        for i in range(0, t_frames - frame_padding):
+            offset = i*self.__mfcc_stride
             chunk = mfcc[:,:,:,offset:(offset + self.__mfcc_window)]
             chunk = self.__mfcc_encoder(chunk)
             chunk = torch.cat([chunk, landmark_feature], dim = 1)
             chunk = chunk.unsqueeze(1)
             mfcc_array.append(chunk)
         mfcc_array = torch.cat(mfcc_array, dim = 1)
-        out, _ = self.__landmark_lstm(mfcc_array)
+
+        hidden = (
+            torch.autograd.Variable(torch.zeros(3, mfcc.size(0), 256).cuda()),
+            torch.autograd.Variable(torch.zeros(3, mfcc.size(0), 256).cuda()),
+        )
+        out, _ = self.__landmark_lstm(mfcc_array, hidden)
         
         _, frames, _ = out.shape
         out_array = []

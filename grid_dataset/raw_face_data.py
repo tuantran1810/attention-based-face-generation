@@ -13,7 +13,6 @@ class RawFaceData(object):
     def __init__(
         self,
         videorootfolder = "./sample_videos",
-        landmark_outputpath = "./preprocessed/raw_landmark.pkl",
         image_outputpath = "./preprocessed/images",
         video_ext = "mpg",
         face_expected_ratio = "1:1",
@@ -48,7 +47,6 @@ class RawFaceData(object):
                         print('{}/{}.gzip existed'.format(identity, code))
                         self.__paths[identity].pop(code, None)
 
-        self.__landmark_outputpath = landmark_outputpath
         self.__image_outputpath = image_outputpath
         fw, fh = face_expected_ratio.split(':')
         self.__faceratiowh = int(fw)/int(fh)
