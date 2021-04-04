@@ -14,17 +14,12 @@ class Generator(nn.Module):
         self.__landmark_hidden_shape = landmark_hidden_shape
         self.__image_encoder = ImageEncoder(device = device)
         self.__landmark_first_stage_enc = LinearBlock(points*pdims, landmark_hidden_dims).to(device)
-        self.__landmark_second_stage_env = Conv2dBlock(1, 256, kernel = 3, stride = 1, padding = 1).to(device)
-        self.__landmark_final_stage_enc = nn.Sequential(
-            nn.Conv2d(256, 512, kernel_size = 3, stride = 1, padding = 1),
-            nn.BatchNorm2d(512),
-            nn.Tanh(),
-        ).to(device)
+        self.__landmark_second_stage_enc = Conv2dBlock(1, 256, kernel = 3, stride = 1, padding = 1).to(device)
+        self.__landmark_final_stage_enc = Conv2dBlock(256, 512, kernel = 3, stride = 1, padding = 1, activation = nn.Tanh).to(device)
         self.__landmark_attention = nn.Sequential(
             Deconv2dBlock(in_channels = 512, out_channels = 256, kernel = 3, stride = 2, padding = 1, output_padding = 1),
             Deconv2dBlock(in_channels = 256, out_channels = 128, kernel = 3, stride = 2, padding = 1, output_padding = 1),
-            nn.Conv2d(128, 1, kernel_size = 3, stride = 1, padding = 1),
-            nn.Sigmoid(),
+            Conv2dBlock(in_channels = 128, out_channels = 1, kernel = 3, stride = 1, padding = 1, norm = None, activation = nn.Sigmoid),
         ).to(device)
         self.__bottle_neck = Conv2dBlock(in_channels = 1024, out_channels = 128, kernel = 3, stride = 1, padding = 1).to(device)
         self.__gru = Conv2dGRU(
@@ -51,18 +46,8 @@ class Generator(nn.Module):
             Deconv2dBlock(in_channels = 64, out_channels = 32, kernel = 3, stride = 2, padding = 1, output_padding = 1),
         ).to(device)
 
-        self.__color_generator = nn.Sequential(
-            nn.Conv2d(32, 3, kernel_size = 7, padding = 3),
-            nn.BatchNorm2d(3),
-            nn.Tanh(),
-        ).to(device)
-
-        self.__attention_generator = nn.Sequential(
-            nn.Conv2d(32, 1, kernel_size = 7, padding = 3),
-            nn.BatchNorm2d(1),
-            nn.Tanh(),
-        ).to(device)
-
+        self.__color_generator = Conv2dBlock(32, 3, kernel = 7, padding = 3, activation = nn.Tanh).to(device)
+        self.__attention_generator = Conv2dBlock(32, 1, kernel = 7, padding = 3, activation = nn.Sigmoid).to(device)
         self.__device = device
 
     def forward(self, original_image, original_landmark, generated_landmark):
@@ -85,7 +70,7 @@ class Generator(nn.Module):
         original_landmark = original_landmark.view(batchsize, -1)
         original_landmark_features = self.__landmark_first_stage_enc(original_landmark).view(batchsize, *self.__landmark_hidden_shape)
         original_landmark_features = original_landmark_features.unsqueeze(1)
-        original_landmark_features_second_stage = self.__landmark_second_stage_env(original_landmark_features)
+        original_landmark_features_second_stage = self.__landmark_second_stage_enc(original_landmark_features)
         original_landmark_features_final_stage = self.__landmark_final_stage_enc(original_landmark_features_second_stage)
 
         generated_landmark = generated_landmark.view(batchsize, frames, -1)
@@ -97,11 +82,13 @@ class Generator(nn.Module):
         for i in range(frames):
             tmp = generated_landmark_features[:, i, :, :]
             tmp = tmp.unsqueeze(1)
-            tmp = self.__landmark_second_stage_env(tmp)
-            att = self.__landmark_attention(torch.cat((original_landmark_features_second_stage, tmp), dim = 1))
+            tmp = self.__landmark_second_stage_enc(tmp)
+            att_feature = torch.cat((original_landmark_features_second_stage, tmp), dim = 1)
+            att = self.__landmark_attention(att_feature)
             lmark = self.__landmark_final_stage_enc(tmp)
 
-            img_feature = self.__bottle_neck(torch.cat((image_features, lmark - original_landmark_features_final_stage), dim = 1))
+            img_feature = torch.cat((image_features, lmark - original_landmark_features_final_stage), dim = 1)
+            img_feature = self.__bottle_neck(img_feature)
             gru_input.append(img_feature)
             landmark_attention.append(att)
 
