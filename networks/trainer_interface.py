@@ -24,7 +24,6 @@ class LandmarkDecoderTrainerInterface(LandmarkDecoder):
         mfcc = mfcc.to(self.__device)
         landmarks = landmarks.to(self.__device)
         
-        batchsize = landmarks.shape[0]
         pca_landmarks = torch.matmul(landmarks - self.__pca_mean, self.__pca_components)
         return super().forward(pca_landmarks, mfcc)
 
@@ -42,7 +41,6 @@ class LandmarkMSELoss(nn.Module):
         y: (batchsize, t, original_dims) -> default: (batchsize, t', 68)
         output: loss score
         '''
-        # y = y[:,self.__y_padding:-self.__y_padding,:]
         y = torch.matmul(y - self.__pca_mean, self.__pca_components)
         return F.mse_loss(yhat, y)
 
