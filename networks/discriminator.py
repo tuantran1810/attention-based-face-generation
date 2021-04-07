@@ -30,12 +30,12 @@ class Discriminator(nn.Module):
         self.__landmark_encoder = nn.Sequential(
             LinearBlock(features, 256),
             LinearBlock(256, 512),
-        )
+        ).to(device)
 
-        self.__lstm = nn.LSTM(input_size = 1024, hidden_size = 256, num_layers = 3, batch_first = True)
-        self.__lstm_fc = LinearBlock(256, landmark_points*landmark_dims, norm = None, activation = nn.Tanh)
-        self.__decision_fc = nn.Linear(256, 1)
-        self.__activation = nn.Sigmoid()
+        self.__lstm = nn.LSTM(input_size = 1024, hidden_size = 256, num_layers = 3, batch_first = True).to(device)
+        self.__lstm_fc = LinearBlock(256, landmark_points*landmark_dims, norm = None, activation = nn.Tanh).to(device)
+        self.__decision_fc = nn.Linear(256, 1).to(device)
+        self.__activation = nn.Sigmoid().to(device)
         
         self.__device = device
 

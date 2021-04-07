@@ -54,7 +54,7 @@ class Generator(nn.Module):
         '''
         original_image: (batchsize, channels, w, h) -> default (batchsize, 3, 128, 128)
         original_landmark: (batchsize, points, dims) -> default (batchsize, 68, 2)
-        generated_landmark: (batchsize, frames, points, dims) -> default (batchsize, frames, 68, 2)
+        generated_landmark: (batchsize, frames, points) -> default (batchsize, frames, 136)
         output: 
             attention_map: (batchsize, channels, frames, w, h) -> default (batchsize, 1, frames, 128, 128)
             color_images: (batchsize, channels, frames, w, h) -> default (batchsize, 3, frames, 128, 128)
@@ -63,7 +63,7 @@ class Generator(nn.Module):
         original_image = original_image.to(self.__device)
         original_landmark = original_landmark.to(self.__device)
         generated_landmark = generated_landmark.to(self.__device)
-        batchsize, frames, points, dims = generated_landmark.shape
+        batchsize, frames, points = generated_landmark.shape
 
         early_image_features, image_features = self.__image_encoder(original_image)
 
@@ -73,8 +73,7 @@ class Generator(nn.Module):
         original_landmark_features_second_stage = self.__landmark_second_stage_enc(original_landmark_features)
         original_landmark_features_final_stage = self.__landmark_final_stage_enc(original_landmark_features_second_stage)
 
-        generated_landmark = generated_landmark.view(batchsize, frames, -1)
-        generated_landmark = generated_landmark.view(-1, points*dims)
+        generated_landmark = generated_landmark.view(-1, points)
         generated_landmark_features = self.__landmark_first_stage_enc(generated_landmark).view(batchsize, frames, *self.__landmark_hidden_shape)
 
         gru_input = []
