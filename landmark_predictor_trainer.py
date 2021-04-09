@@ -12,7 +12,7 @@ from loguru import logger as log
 import matplotlib.pyplot as plt
 
 '''
-This training produce the test loss = 7e-4 at the 10th epoch
+This training produce the test loss = 4.92e-4 at the 17th epoch
 '''
 
 class LandmarkPredictorTrainer():
@@ -94,8 +94,12 @@ class LandmarkPredictorTrainer():
         testing = data[n_training:]
 
         def data_processing(item):
+            r = random.choice([x for x in range(6,50)])
+            window = 16
             mfcc = item['mfcc']
-            mfcc = mfcc.transpose(1, 0)[1:,:]
+            start_mfcc = (r - 3) * 4
+            end_mfcc = (r + window + 3) * 4
+            mfcc = mfcc.transpose(1, 0)[1:, start_mfcc:end_mfcc]
             mfcc = torch.tensor(mfcc).float().unsqueeze(0)
 
             landmarks = item['landmarks']
@@ -104,8 +108,8 @@ class LandmarkPredictorTrainer():
             landmarks = landmarks.reshape(frames, -1)
             landmarks = torch.tensor(landmarks).float()
 
-            inspired_landmark = landmarks[2,:]
-            landmarks = landmarks[3:72]
+            inspired_landmark = landmarks[r,:]
+            landmarks = landmarks[r+1:r+1+window]
             return ((mfcc, inspired_landmark), landmarks)
 
         train_dataset = ArrayDataset(training, data_processing)
@@ -153,10 +157,10 @@ class LandmarkPredictorTrainer():
         folder_path = os.path.join(self.__output_path, data_folder, epoch_folder)
         Path(folder_path).mkdir(parents=True, exist_ok=True)
         for i in range(2):
-            fig, axes = plt.subplots(7,10)
-            for j in range(69):
-                row = j//10
-                col = j%10
+            fig, axes = plt.subplots(4,4)
+            for j in range(16):
+                row = j//4
+                col = j%4
                 ax = axes[row][col]
                 predicted_lm = torch.matmul(yhat[i][j], self.__landmark_pca_components) + self.__landmark_pca_mean
                 predicted_lm = predicted_lm.detach().to("cpu").numpy().reshape(68,2) + self.__landmark_mean
@@ -165,9 +169,9 @@ class LandmarkPredictorTrainer():
                 ax.scatter(predicted_lm[:,0], predicted_lm[:,1], c = 'red', s = 0.2)
                 ax.axis('off')
             image_path = os.path.join(folder_path, "landmark_{}.png".format(i))
-            fig.set_figheight(7)
-            fig.set_figwidth(10)
-            plt.savefig(image_path, dpi = 300)
+            fig.set_figheight(5)
+            fig.set_figwidth(5)
+            plt.savefig(image_path, dpi = 500)
             plt.close()
 
     def start(self):

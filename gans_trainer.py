@@ -47,13 +47,13 @@ class GansTrainer():
         )
         self.__train_dataloader = train_dataloader
         self.__test_dataloader = test_dataloader
-        self.__landmark_loss_mask = torch.cat([torch.ones(96), torch.ones(40)*100]).view(1, 1, 136)
+        self.__landmark_loss_mask = torch.cat([torch.ones(96), torch.ones(40)*100]).view(1, 1, 136).to(device)
 
         self.__output_path = output_path
         self.__last_log_time = None
         self.__log_interval_second = log_interval_second
-        self.__ones_vector = Variable(torch.ones(batchsize), requires_grad = False)
-        self.__zeros_vector = Variable(torch.zeros(batchsize), requires_grad = False)
+        self.__ones_vector = Variable(torch.ones(batchsize), requires_grad = False).to(device)
+        self.__zeros_vector = Variable(torch.zeros(batchsize), requires_grad = False).to(device)
 
     def __reset_gradients(self):
         self.__generator_optim.zero_grad()
@@ -77,12 +77,14 @@ class GansTrainer():
         self.__last_log_time = time.time()
         for epoch in range(self.__epoch_offset, self.__epoch_offset + self.__epochs):
             log.info(f"================================================[epoch {epoch}]================================================")
-            for i, ((landmarks, face_images), (inspired_landmark, inspired_image)) in tqdm(enumerate(self.__train_dataloader)):
+            for i, ((landmarks, face_images), (inspired_landmark, inspired_image)) in enumerate(self.__train_dataloader):
                 landmarks = landmarks.to(self.__device)
                 face_images = face_images.to(self.__device)
                 inspired_landmark = inspired_landmark.to(self.__device)
                 inspired_image = inspired_image.to(self.__device)
                 metrics = {}
+
+                print("chạy nè")
                 """
                 start training discriminator
                 """
@@ -90,50 +92,58 @@ class GansTrainer():
                 for p in self.__discriminator.parameters():
                     p.requires_grad =  True
 
+                print(torch.isfinite(torch.sum(inspired_image)), torch.isfinite(torch.sum(inspired_landmark)), torch.isfinite(torch.sum(landmarks)))
                 _, _, fake_images = self.__generator(inspired_image, inspired_landmark, landmarks)
                 fake_images = fake_images.detach()
+                # judgement, judgement_landmarks = self.__discriminator(fake_images, inspired_landmark)
+                # loss_fake = F.binary_cross_entropy(judgement, self.__zeros_vector)
 
-                judgement, judgement_landmarks = self.__discriminator(fake_images, landmarks)
-                loss_fake = F.binary_cross_entropy(judgement, self.__zeros_vector)
-                loss_fake_landmark = F.mse_loss(
-                    judgement_landmarks * self.__landmark_loss_mask,
-                    landmarks * self.__landmark_loss_mask
-                )
+                # masked_judgement_landmarks = judgement_landmarks * self.__landmark_loss_mask
+                # masked_landmarks = landmarks * self.__landmark_loss_mask
+                # loss_fake_landmark = F.mse_loss(
+                #     masked_judgement_landmarks,
+                #     masked_landmarks
+                # )
 
-                judgement, judgement_landmarks = self.__discriminator(face_images, landmarks)
-                loss_real = F.binary_cross_entropy(judgement, self.__ones_vector)
-                loss_real_landmark = F.mse_loss(
-                    judgement_landmarks * self.__landmark_loss_mask,
-                    landmarks * self.__landmark_loss_mask
-                )
+                # judgement, judgement_landmarks = self.__discriminator(face_images, inspired_landmark)
+                # masked_judgement_landmarks = judgement_landmarks * self.__landmark_loss_mask
+                # masked_landmarks = landmarks * self.__landmark_loss_mask
+                # loss_real = F.binary_cross_entropy(judgement, self.__ones_vector)
+                # loss_real_landmark = F.mse_loss(
+                #     masked_judgement_landmarks,
+                #     masked_landmarks
+                # )
 
-                discriminator_loss = loss_fake + loss_real + loss_fake_landmark + loss_real_landmark
-                discriminator_loss.backward()
-                metrics['discriminator_loss'] = discriminator_loss
-                self.__discriminator_optim.step()
+                # discriminator_loss = loss_fake + loss_real + loss_fake_landmark + loss_real_landmark
+                # discriminator_loss.backward()
+                # discriminator_loss = discriminator_loss.detach()
+                # metrics['discriminator_loss'] = discriminator_loss
+                # self.__discriminator_optim.step()
 
                 """
                 start training generator
                 """
-                self.__reset_gradients()
-                for p in self.__discriminator.parameters():
-                    p.requires_grad =  False
-                attention_map, color_images, fake_images = self.__generator(inspired_image, inspired_landmark, landmarks)
-                judgement, judgement_landmarks = self.__discriminator(fake_images, landmarks)
-                loss_generator = F.binary_cross_entropy(judgement, self.__ones_vector)
-                loss_generator_landmark = F.mse_loss(
-                    judgement_landmarks * self.__landmark_loss_mask,
-                    landmarks * self.__landmark_loss_mask
-                )
-                pixel_loss_mask = attention_map.detach() + 0.5
-                pixel_diff = torch.abs(fake_images - face_images) * pixel_loss_mask
-                pixel_loss = pixel_diff.mean(pixel_diff)
-                final_generator_loss = 10*pixel_loss + loss_generator + loss_generator_landmark
-                final_generator_loss.backward()
-                metrics['final_generator_loss'] = final_generator_loss
-                self.__generator_optim.step()
-                self.__reset_gradients()
-                
+                # self.__reset_gradients()
+                # for p in self.__discriminator.parameters():
+                #     p.requires_grad =  False
+                # attention_map, color_images, fake_images = self.__generator(inspired_image, inspired_landmark, landmarks)
+                # judgement, judgement_landmarks = self.__discriminator(fake_images, inspired_landmark)
+                # loss_generator = F.binary_cross_entropy(judgement, self.__ones_vector)
+                # loss_generator_landmark = F.mse_loss(
+                #     judgement_landmarks * self.__landmark_loss_mask,
+                #     landmarks * self.__landmark_loss_mask
+                # )
+                # pixel_loss_mask = attention_map.detach() + 0.5
+                # pixel_diff = fake_images - face_images
+                # print(fake_images.cpu())
+                # pixel_diff = torch.abs(pixel_diff) * pixel_loss_mask
+                # pixel_loss = torch.mean(pixel_diff)
+                # final_generator_loss = 10*pixel_loss + loss_generator + loss_generator_landmark
+                # final_generator_loss.backward()
+                # metrics['final_generator_loss'] = final_generator_loss
+                # self.__generator_optim.step()
+                # self.__reset_gradients()
+
                 self.__do_logging(epoch, i, metrics)
 class FaceGeneratorTrainer():
     def __init__(self,
@@ -168,12 +178,11 @@ class FaceGeneratorTrainer():
             return lm
 
         landmarks = process_landmark(item['landmarks'])
-        inspired_landmark = landmarks[2]
-        landmarks = landmarks[3:72]
+        inspired_landmark = landmarks[0]
 
         transform_ops = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
+            # transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
         ])
 
         face_images = None
@@ -185,8 +194,8 @@ class FaceGeneratorTrainer():
                 image = transform_ops(image)
                 normalized_images.append(image)
             face_images = torch.stack(normalized_images)
-        inspired_image = face_images[2]
-        face_images = face_images[3:72]
+        inspired_image = face_images[3]
+        face_images = face_images[3:72].permute(1,0,2,3)
 
         return ((landmarks, face_images), (inspired_landmark, inspired_image))
 
@@ -242,5 +251,5 @@ class FaceGeneratorTrainer():
         self.__trainer.start_training()
 
 if __name__ == "__main__":
-    trainer = FaceGeneratorTrainer(device = "cuda:0")
+    trainer = FaceGeneratorTrainer(device = "cpu")
     trainer.start()

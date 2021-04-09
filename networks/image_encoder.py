@@ -74,7 +74,8 @@ class ImageEncoder(nn.Module):
 
 if __name__ == '__main__':
     ienc = ImageEncoder()
-    x = torch.ones(7, 3, 128, 128)
+    x = torch.ones(7, 3, 128, 128)*100
     y1, y2 = ienc(x)
     print(y1.shape)
     print(y2.shape)
+    print(ienc)

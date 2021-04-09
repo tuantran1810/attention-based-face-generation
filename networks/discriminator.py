@@ -47,7 +47,7 @@ class Discriminator(nn.Module):
         '''
         generated_images = generated_images.to(self.__device)
         original_landmark = original_landmark.to(self.__device)
-        batchsize, landmark_points, landmark_dims = original_landmark.shape
+        batchsize, _ = original_landmark.shape
         frames = generated_images.shape[2]
 
         original_landmark = original_landmark.view(batchsize, -1)
@@ -69,7 +69,7 @@ class Discriminator(nn.Module):
         for i in range(frames):
             lstm_out = lstm_output[:,i,:]
             landmark_features = self.__lstm_fc(lstm_out)
-            landmark = (landmark_features + original_landmark).view(batchsize, landmark_points, landmark_dims)
+            landmark = landmark_features + original_landmark
             landmark_output.append(landmark)
             decision = self.__decision_fc(lstm_out)
             decision_output.append(decision)
@@ -83,7 +83,7 @@ class Discriminator(nn.Module):
 if __name__ == "__main__":
     dis = Discriminator()
     gen_images = torch.ones(2, 3, 75, 128, 128)
-    orig_landmark = torch.ones(2, 68, 2)
+    orig_landmark = torch.ones(2, 136)
     decision_output, landmark_output = dis(gen_images, orig_landmark)
     print(decision_output.shape)
     print(landmark_output.shape)

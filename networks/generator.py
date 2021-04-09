@@ -53,7 +53,7 @@ class Generator(nn.Module):
     def forward(self, original_image, original_landmark, generated_landmark):
         '''
         original_image: (batchsize, channels, w, h) -> default (batchsize, 3, 128, 128)
-        original_landmark: (batchsize, points, dims) -> default (batchsize, 68, 2)
+        original_landmark: (batchsize, points) -> default (batchsize, 136)
         generated_landmark: (batchsize, frames, points) -> default (batchsize, frames, 136)
         output: 
             attention_map: (batchsize, channels, frames, w, h) -> default (batchsize, 1, frames, 128, 128)
@@ -67,8 +67,8 @@ class Generator(nn.Module):
 
         early_image_features, image_features = self.__image_encoder(original_image)
 
-        original_landmark = original_landmark.view(batchsize, -1)
-        original_landmark_features = self.__landmark_first_stage_enc(original_landmark).view(batchsize, *self.__landmark_hidden_shape)
+        original_landmark_features = self.__landmark_first_stage_enc(original_landmark)
+        original_landmark_features = original_landmark_features.view(batchsize, *self.__landmark_hidden_shape)
         original_landmark_features = original_landmark_features.unsqueeze(1)
         original_landmark_features_second_stage = self.__landmark_second_stage_enc(original_landmark_features)
         original_landmark_features_final_stage = self.__landmark_final_stage_enc(original_landmark_features_second_stage)
@@ -111,14 +111,14 @@ class Generator(nn.Module):
             output_t = attention_map_t*color_t + (1 - attention_map_t)*original_image
             output.append(output_t)
 
-        return torch.stack(att_map, dim = 1), torch.stack(color, dim = 1), torch.stack(output, dim = 1)
+        return torch.stack(att_map, dim = 2), torch.stack(color, dim = 2), torch.stack(output, dim = 2)
 
 if __name__ == "__main__":
     gen = Generator(device = 'cpu')
-    batchsize = 2
+    batchsize = 1
     orig_image = torch.ones(batchsize, 3, 128, 128)
-    orig_landmark = torch.ones(batchsize, 68, 2)
-    gen_landmark = torch.ones(batchsize, 75, 68, 2)
+    orig_landmark = torch.ones(batchsize, 136)
+    gen_landmark = torch.ones(batchsize, 75, 136)
     att, color, out = gen(orig_image.float(), orig_landmark.float(), gen_landmark.float())
     print(att.shape)
     print(color.shape)
