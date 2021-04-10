@@ -18,7 +18,7 @@ class MFCCLandmarkCreator():
         landmark_mean_path = "./grid_dataset/preprocessed/landmark_mean.pkl",
         landmark_path = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
         mfcc_path = "/media/tuantran/raid-data/dataset/GRID/audio_50/mfcc.pkl",
-        output_path = "/media/tuantran/raid-data/dataset/GRID/attention-based-face-generation/generated_landmark.pkl",
+        output_path = "/media/tuantran/raid-data/dataset/GRID/attention-based-face-generation/generated_pca_landmark_6_50.pkl",
         device = "cpu"
     ):
         self.__device = device
@@ -55,7 +55,6 @@ class MFCCLandmarkCreator():
         with open(mfccpath, 'rb') as fd:
             mfcc_data = pickle.load(fd)
 
-
         data = []
         for identity, idmap in landmark_data.items():
             for code, lm in idmap.items():
@@ -68,19 +67,35 @@ class MFCCLandmarkCreator():
 
         random.shuffle(data)
 
-        def data_processing(item):
-            mfcc = item['mfcc']
-            mfcc = mfcc.transpose(1, 0)[1:,:]
+        def get_data_index(index, mfcc, landmarks):
+            window = 16
+            start_mfcc = (index - 3) * 4
+            end_mfcc = (index + window + 3) * 4
+            mfcc = mfcc.transpose(1, 0)[1:, start_mfcc:end_mfcc]
             mfcc = torch.tensor(mfcc).float().unsqueeze(0)
 
-            landmarks = item['landmarks']
             landmarks = landmarks - self.__landmark_mean
             frames = landmarks.shape[0]
             landmarks = landmarks.reshape(frames, -1)
             landmarks = torch.tensor(landmarks).float()
 
-            inspired_landmark = landmarks[2,:]
-            landmarks = landmarks[3:72]
+            inspired_landmark = landmarks[index,:]
+            landmarks = landmarks[index+1:index+1+window]
+            return mfcc, inspired_landmark, landmarks
+
+        def data_processing(item):
+            window = 16
+            mfcc = item['mfcc']
+            landmarks = item['landmarks']
+            mfcc_arr, inspired_landmark_arr, frame_landmark_arr = list(), list(), list()
+            for i in range(6, 50):
+                frame_mfcc, frame_inspired_landmark, frame_landmark = get_data_index(i, mfcc, landmarks)
+                mfcc_arr.append(frame_mfcc)
+                inspired_landmark_arr.append(frame_inspired_landmark)
+                frame_landmark_arr.append(frame_landmark)
+            mfcc = torch.stack(mfcc_arr)
+            inspired_landmark = torch.stack(inspired_landmark_arr)
+            landmarks = torch.stack(frame_landmark_arr)
             return ((item['identity'], item['code']), (mfcc, inspired_landmark), landmarks)
 
         dataset = ArrayDataset(data, data_processing)
@@ -103,21 +118,20 @@ class MFCCLandmarkCreator():
     def start(self):
         data = {}
         with torch.no_grad():
-            for (identities, codes), (mfcc, inspired_landmark), _ in self.__produce_data():
-                pca_landmarks = torch.matmul(inspired_landmark - self.__landmark_pca_mean, self.__landmark_pca_components.transpose(0,1))
-                yhat = self.__model(pca_landmarks, mfcc)
-                yhat = torch.matmul(yhat, self.__landmark_pca_components) + self.__landmark_pca_mean
-                
-                batchsize = yhat.shape[0]
-                for i in range(batchsize):
-                    identity, code = identities[i], codes[i]
-                    yhati = yhat[i]
-                    frames = yhati.shape[0]
-                    yhati = yhati.view(frames, 68, -1)
+            for (identities, codes), (mfcc, inspired_landmark), _ in tqdm(self.__produce_data()):
+                for i in range(len(identities)):
+                    identity = identities[i]
+                    code = codes[i]
+                    i_mfcc = mfcc[i]
+                    i_inspired_landmark = inspired_landmark[i]
+                    pca_landmarks = torch.matmul(i_inspired_landmark - self.__landmark_pca_mean, self.__landmark_pca_components.transpose(0,1))
+                    yhat = self.__model(pca_landmarks, i_mfcc)
+                    yhat = yhat.detach().cpu().numpy()
+                    yhat = np.float32(yhat)
                     if identity not in data:
-                        data[identity] = dict()
-                    data[identity][code] = yhati.detach().to('cpu').numpy()
-        
+                        data[identity] = {}
+                    data[identity][code] = yhat
+
         with open(self.__output_path, 'wb') as fd:
             pickle.dump(data, fd)
 

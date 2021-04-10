@@ -73,18 +73,66 @@ class GansTrainer():
         self.__last_log_time = now
         self.__metric_log(epoch, sample, metrics)
 
+    def __save_evaluation_data(self,
+        epoch,
+        sample,
+        identity,
+        code,
+        data_start_index,
+        original_images,
+        attention_map,
+        color_images,
+        fake_images,
+    ):
+        if sample > 0:
+            return
+        data_folder = "data"
+        folder_path = os.path.join(self.__output_path, data_folder)
+        Path(folder_path).mkdir(parents=True, exist_ok=True)
+        original_images = np.uint8((original_images.cpu().numpy() + 1.0) * 127.5)
+        attention_map = attention_map.cpu().numpy()
+        color_images = np.uint8((color_images.cpu().numpy() + 1.0) * 127.5)
+        fake_images = np.uint8((fake_images.cpu().numpy() + 1.0) * 127.5)
+        data = {
+            'identity': identity,
+            'code': code,
+            'data_start_index': data_start_index,
+            'original_images': original_images,
+            'attention_map': attention_map,
+            'color_images': color_images,
+            'fake_images': fake_images,
+        }
+        data_path = os.path.join(folder_path, "data_{}.pkl".format(epoch))
+        with open(data_path, 'wb') as fd:
+            pickle.dump(data, fd)
+
+    def __save_model(self, epoch):
+        log.info(f"saving model for epoch {epoch}")
+        models_folder = "models"
+        epoch_folder = "epoch_{}".format(epoch)
+        folder_path = os.path.join(self.__output_path, models_folder, epoch_folder)
+        Path(folder_path).mkdir(parents=True, exist_ok=True)
+
+        generator_path = os.path.join(folder_path, "generator.pt")
+        torch.save(self.__generator.state_dict(), generator_path)
+        discrinminator_path = os.path.join(folder_path, 'discriminator.pt')
+        torch.save(self.__discriminator.state_dict(), discrinminator_path)
+
     def start_training(self):
         self.__last_log_time = time.time()
         for epoch in range(self.__epoch_offset, self.__epoch_offset + self.__epochs):
             log.info(f"================================================[epoch {epoch}]================================================")
-            for i, ((landmarks, face_images), (inspired_landmark, inspired_image)) in enumerate(self.__train_dataloader):
+            i = 0
+            log.info("start training...")
+            for item in tqdm(self.__train_dataloader, "training"):
+                i += 1
+                (identity, code, data_start_index), (landmarks, face_images), (inspired_landmark, inspired_image) = item
                 landmarks = landmarks.to(self.__device)
                 face_images = face_images.to(self.__device)
                 inspired_landmark = inspired_landmark.to(self.__device)
                 inspired_image = inspired_image.to(self.__device)
                 metrics = {}
 
-                print("chạy nè")
                 """
                 start training discriminator
                 """
@@ -92,76 +140,156 @@ class GansTrainer():
                 for p in self.__discriminator.parameters():
                     p.requires_grad =  True
 
-                print(torch.isfinite(torch.sum(inspired_image)), torch.isfinite(torch.sum(inspired_landmark)), torch.isfinite(torch.sum(landmarks)))
                 _, _, fake_images = self.__generator(inspired_image, inspired_landmark, landmarks)
                 fake_images = fake_images.detach()
-                # judgement, judgement_landmarks = self.__discriminator(fake_images, inspired_landmark)
-                # loss_fake = F.binary_cross_entropy(judgement, self.__zeros_vector)
+                judgement, judgement_landmarks = self.__discriminator(fake_images, inspired_landmark)
+                loss_fake = F.binary_cross_entropy(judgement, self.__zeros_vector)
 
-                # masked_judgement_landmarks = judgement_landmarks * self.__landmark_loss_mask
-                # masked_landmarks = landmarks * self.__landmark_loss_mask
-                # loss_fake_landmark = F.mse_loss(
-                #     masked_judgement_landmarks,
-                #     masked_landmarks
-                # )
+                masked_judgement_landmarks = judgement_landmarks * self.__landmark_loss_mask
+                masked_landmarks = landmarks * self.__landmark_loss_mask
+                loss_fake_landmark = F.mse_loss(
+                    masked_judgement_landmarks,
+                    masked_landmarks
+                )
 
-                # judgement, judgement_landmarks = self.__discriminator(face_images, inspired_landmark)
-                # masked_judgement_landmarks = judgement_landmarks * self.__landmark_loss_mask
-                # masked_landmarks = landmarks * self.__landmark_loss_mask
-                # loss_real = F.binary_cross_entropy(judgement, self.__ones_vector)
-                # loss_real_landmark = F.mse_loss(
-                #     masked_judgement_landmarks,
-                #     masked_landmarks
-                # )
+                judgement, judgement_landmarks = self.__discriminator(face_images, inspired_landmark)
+                masked_judgement_landmarks = judgement_landmarks * self.__landmark_loss_mask
+                masked_landmarks = landmarks * self.__landmark_loss_mask
+                loss_real = F.binary_cross_entropy(judgement, self.__ones_vector)
+                loss_real_landmark = F.mse_loss(
+                    masked_judgement_landmarks,
+                    masked_landmarks
+                )
 
-                # discriminator_loss = loss_fake + loss_real + loss_fake_landmark + loss_real_landmark
-                # discriminator_loss.backward()
-                # discriminator_loss = discriminator_loss.detach()
-                # metrics['discriminator_loss'] = discriminator_loss
-                # self.__discriminator_optim.step()
+                discriminator_loss = loss_fake + loss_real + loss_fake_landmark + loss_real_landmark
+                discriminator_loss.backward()
+                self.__discriminator_optim.step()
+                metrics['discriminator_loss'] = discriminator_loss
 
                 """
                 start training generator
                 """
-                # self.__reset_gradients()
-                # for p in self.__discriminator.parameters():
-                #     p.requires_grad =  False
-                # attention_map, color_images, fake_images = self.__generator(inspired_image, inspired_landmark, landmarks)
-                # judgement, judgement_landmarks = self.__discriminator(fake_images, inspired_landmark)
-                # loss_generator = F.binary_cross_entropy(judgement, self.__ones_vector)
-                # loss_generator_landmark = F.mse_loss(
-                #     judgement_landmarks * self.__landmark_loss_mask,
-                #     landmarks * self.__landmark_loss_mask
-                # )
-                # pixel_loss_mask = attention_map.detach() + 0.5
-                # pixel_diff = fake_images - face_images
-                # print(fake_images.cpu())
-                # pixel_diff = torch.abs(pixel_diff) * pixel_loss_mask
-                # pixel_loss = torch.mean(pixel_diff)
-                # final_generator_loss = 10*pixel_loss + loss_generator + loss_generator_landmark
-                # final_generator_loss.backward()
-                # metrics['final_generator_loss'] = final_generator_loss
-                # self.__generator_optim.step()
-                # self.__reset_gradients()
+                self.__reset_gradients()
+                for p in self.__discriminator.parameters():
+                    p.requires_grad =  False
+                attention_map, color_images, fake_images = self.__generator(inspired_image, inspired_landmark, landmarks)
+                judgement, judgement_landmarks = self.__discriminator(fake_images, inspired_landmark)
+                loss_generator = F.binary_cross_entropy(judgement, self.__ones_vector)
+                loss_generator_landmark = F.mse_loss(
+                    judgement_landmarks * self.__landmark_loss_mask,
+                    landmarks * self.__landmark_loss_mask
+                )
+                pixel_loss_mask = attention_map.detach() + 0.5
+                pixel_diff = fake_images - face_images
+                pixel_diff = torch.abs(pixel_diff) * pixel_loss_mask
+                pixel_loss = torch.mean(pixel_diff)
+                final_generator_loss = 10*pixel_loss + loss_generator + loss_generator_landmark
+                final_generator_loss.backward()
+                metrics['pixel_loss'] = pixel_loss
+                metrics['loss_generator'] = loss_generator
+                metrics['loss_generator_landmark'] = loss_generator_landmark
+                metrics['final_generator_loss'] = final_generator_loss
+
+                self.__generator_optim.step()
+                self.__reset_gradients()
 
                 self.__do_logging(epoch, i, metrics)
+                break
+
+            log.info("start evaluating...")
+            with torch.no_grad():
+                cnt = 0.0
+                pixel_loss_arr = []
+                loss_generator_arr = []
+                loss_generator_landmark_arr = []
+                final_generator_loss_arr = []
+                i = 0
+                for item in tqdm(self.__test_dataloader, "evaluating"):
+                    cnt += 1.0
+                    (identity, code, data_start_index), (landmarks, face_images), (inspired_landmark, inspired_image) = item
+                    landmarks = landmarks.to(self.__device)
+                    face_images = face_images.to(self.__device)
+                    inspired_landmark = inspired_landmark.to(self.__device)
+                    inspired_image = inspired_image.to(self.__device)
+
+                    attention_map, color_images, fake_images = self.__generator(inspired_image, inspired_landmark, landmarks)
+                    judgement, judgement_landmarks = self.__discriminator(fake_images, inspired_landmark)
+                    loss_generator = F.binary_cross_entropy(judgement, self.__ones_vector)
+                    loss_generator_landmark = F.mse_loss(
+                        judgement_landmarks * self.__landmark_loss_mask,
+                        landmarks * self.__landmark_loss_mask,
+                    )
+                    pixel_loss_mask = attention_map.detach() + 0.5
+                    pixel_diff = fake_images - face_images
+                    pixel_diff = torch.abs(pixel_diff) * pixel_loss_mask
+                    pixel_loss = torch.mean(pixel_diff)
+                    final_generator_loss = 10*pixel_loss + loss_generator + loss_generator_landmark
+
+                    pixel_loss_arr.append(pixel_loss)
+                    loss_generator_arr.append(loss_generator)
+                    loss_generator_landmark_arr.append(loss_generator_landmark)
+                    final_generator_loss_arr.append(final_generator_loss)
+                    self.__save_evaluation_data(
+                        epoch,
+                        i,
+                        identity,
+                        code,
+                        data_start_index,
+                        face_images,
+                        attention_map,
+                        color_images,
+                        fake_images
+                    )
+                    i += 1
+
+                metrics = {
+                    "pixel_loss": sum(pixel_loss_arr)/cnt,
+                    'loss_generator': sum(loss_generator_arr)/cnt,
+                    'loss_generator_landmark': sum(loss_generator_landmark_arr)/cnt,
+                    'final_generator_loss': sum(final_generator_loss_arr)/cnt,
+                }
+                self.__metric_log(epoch, -1, metrics)
+            self.__save_model(epoch)
+
 class FaceGeneratorTrainer():
     def __init__(self,
         epochs = 20,
         epoch_offset = 1,
-        batchsize = 2,
+        batchsize = 5,
         lr = 0.0002,
-        landmark_path = "/media/tuantran/raid-data/dataset/GRID/attention-based-face-generation/generated_landmark.pkl",
+        landmark_features = 7,
+        landmark_pca_path = "./grid_dataset/preprocessed/landmark_pca.pkl",
+        landmark_mean_path = "./grid_dataset/preprocessed/landmark_mean.pkl",
+        generated_pca_landmark_path = "/media/tuantran/raid-data/dataset/GRID/attention-based-face-generation/generated_pca_landmark_6_50.pkl",
+        standard_landmark_path = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
         face_root_path = "/media/tuantran/rapid-data/dataset/GRID/face_images_128",
         output_path = "./face_decoder_output",
         device = "cpu",
     ):
         self.__device = device
         self.__output_path = output_path
-        self.__train_dataloader, self.__test_dataloader = self.__create_dataloader(landmark_path, face_root_path, batchsize = batchsize)
+
+        landmark_pca_metadata = None
+        with open(landmark_pca_path, 'rb') as fd:
+            landmark_pca_metadata = pickle.load(fd)
+        if landmark_pca_metadata is None:
+            raise Exception("cannot load pca metadata")
+
+        landmark_mean = None
+        with open(landmark_mean_path, 'rb') as fd:
+            landmark_mean = pickle.load(fd)
+        if landmark_mean is None:
+            raise Exception("cannot load pca metadata")
+        self.__landmark_mean = landmark_mean.reshape(1, -1)
+
+        landmark_pca_metadata = landmark_pca_metadata[landmark_features]
+        self.__landmark_pca_mean = np.expand_dims(landmark_pca_metadata["mean"], 0)
+        self.__landmark_pca_components = landmark_pca_metadata["components"]
+
+        train_dataloader, test_dataloader = self.__create_dataloader(generated_pca_landmark_path, standard_landmark_path, face_root_path, batchsize = batchsize)
         self.__trainer = GansTrainer(
-            self.__train_dataloader,
-            self.__test_dataloader,
+            train_dataloader,
+            test_dataloader,
             output_path,
             batchsize,
             adam_lr = lr,
@@ -171,18 +299,36 @@ class FaceGeneratorTrainer():
         )
 
     def __data_processing(self, item):
-        def process_landmark(lm):
-            frames = lm.shape[0]
-            lm = lm.reshape(frames, -1)
-            lm = torch.tensor(lm).float()
-            return lm
+        r = random.randint(6, 49)
+        window = 16
+        inspired_landmark = item['standard_landmark'][r]
+        inspired_landmark = inspired_landmark.reshape(1, -1)
 
-        landmarks = process_landmark(item['landmarks'])
-        inspired_landmark = landmarks[0]
+        def process_pca_landmark(pca_landmarks, index):
+            if index < 6:
+                raise Exception("invalid index")
+            index -= 6
+            pca_landmark = pca_landmarks[index]
+            landmark = np.matmul(pca_landmark, self.__landmark_pca_components) + self.__landmark_pca_mean
+            landmark = landmark + self.__landmark_mean - 0.5
+            landmark = torch.tensor(landmark).float()
+            return landmark
+
+        def process_inspired_landmark(standard_landmarks, index):
+            if index < 6:
+                raise Exception("invalid index")
+            index -= 6
+            landmark = standard_landmarks[index].flatten()
+            landmark = landmark - 0.5
+            landmark = torch.tensor(landmark).float()
+            return landmark
+
+        landmarks = process_pca_landmark(item['generated_pca_landmark'], r)
+        inspired_landmark = process_inspired_landmark(item['standard_landmark'], r)
 
         transform_ops = transforms.Compose([
             transforms.ToTensor(),
-            # transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
+            transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
         ])
 
         face_images = None
@@ -194,22 +340,27 @@ class FaceGeneratorTrainer():
                 image = transform_ops(image)
                 normalized_images.append(image)
             face_images = torch.stack(normalized_images)
-        inspired_image = face_images[3]
-        face_images = face_images[3:72].permute(1,0,2,3)
+        inspired_image = face_images[r]
+        face_images = face_images[r+1:r+1+window].permute(1,0,2,3)
 
-        return ((landmarks, face_images), (inspired_landmark, inspired_image))
+        return ((item['identity'], item['code'], r+1), (landmarks, face_images), (inspired_landmark, inspired_image))
 
     def __create_dataloader(
         self,
-        landmark_path,
+        generated_pca_landmark_path,
+        standard_landmark_path,
         root_face_video_path,
         batchsize,
         training_percentage = 95,
         video_file_ext = 'gzip',
     ):
-        landmark_data = None
-        with open(landmark_path, 'rb') as fd:
-            landmark_data = pickle.load(fd)
+        generated_landmark_data = None
+        with open(generated_pca_landmark_path, 'rb') as fd:
+            generated_landmark_data = pickle.load(fd)
+
+        standard_landmark_data = None
+        with open(standard_landmark_path, 'rb') as fd:
+            standard_landmark_data = pickle.load(fd)
 
         face_video_paths = dict()
         for path, _ , files in os.walk(root_face_video_path):
@@ -223,10 +374,13 @@ class FaceGeneratorTrainer():
                 face_video_paths[identity] = videomap
 
         data = []
-        for identity, idmap in landmark_data.items():
+        for identity, idmap in generated_landmark_data.items():
             for code, lm in idmap.items():
                 data.append({
-                    'landmarks': lm, 
+                    'identity': identity,
+                    'code': code,
+                    'generated_pca_landmark': lm, 
+                    'standard_landmark': standard_landmark_data[identity][code], 
                     'video_path': face_video_paths[identity][code],
                 })
 
@@ -251,5 +405,5 @@ class FaceGeneratorTrainer():
         self.__trainer.start_training()
 
 if __name__ == "__main__":
-    trainer = FaceGeneratorTrainer(device = "cpu")
+    trainer = FaceGeneratorTrainer(device = "cuda:0")
     trainer.start()
