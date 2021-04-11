@@ -27,6 +27,7 @@ class GansTrainer():
         adam_beta2 = 0.999,
         epochs = 20,
         epoch_offset = 1,
+        pretrained_model_paths = dict(),
         log_interval_second = 30,
         device = "cpu",
     ):
@@ -35,6 +36,16 @@ class GansTrainer():
         self.__epoch_offset = epoch_offset
         self.__generator = Generator(device = device)
         self.__discriminator = Discriminator(device = device)
+        if 'generator' in pretrained_model_paths:
+            path = pretrained_model_paths['generator']
+            log.info(f"reload generator from {path}")
+            self.__generator.load_state_dict(torch.load(path))
+
+        if 'discriminator' in pretrained_model_paths:
+            path = pretrained_model_paths['discriminator']
+            log.info(f"reload discriminator from {path}")
+            self.__discriminator.load_state_dict(torch.load(path))
+
         self.__generator_optim = torch.optim.Adam(
             self.__generator.parameters(),
             lr = adam_lr,
@@ -241,6 +252,7 @@ class GansTrainer():
                         fake_images
                     )
                     i += 1
+                    break
 
                 metrics = {
                     "pixel_loss": sum(pixel_loss_arr)/cnt,
@@ -264,6 +276,7 @@ class FaceGeneratorTrainer():
         standard_landmark_path = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
         face_root_path = "/media/tuantran/rapid-data/dataset/GRID/face_images_128",
         output_path = "./face_decoder_output",
+        pretrained_model_paths = dict(),
         device = "cpu",
     ):
         self.__device = device
@@ -295,6 +308,7 @@ class FaceGeneratorTrainer():
             adam_lr = lr,
             epochs = epochs,
             epoch_offset = epoch_offset,
+            pretrained_model_paths = pretrained_model_paths,
             device = device,
         )
 
@@ -404,6 +418,67 @@ class FaceGeneratorTrainer():
         log.info("start training")
         self.__trainer.start_training()
 
+def get_config():
+    config = dict()
+
+    torch_device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = os.getenv('FIG_DEVICE')
+    device = device if device is not None else torch_device
+    config['device'] = device
+
+    default_generated_pca_landmark_path = "/media/tuantran/raid-data/dataset/GRID/attention-based-face-generation/generated_pca_landmark_6_50.pkl"
+    generated_pca_landmark_path = os.getenv('FIG_GENERATED_PCA_LANDMARK_PATH')
+    generated_pca_landmark_path = generated_pca_landmark_path if generated_pca_landmark_path is not None else default_generated_pca_landmark_path
+    config['generated_pca_landmark_path'] = generated_pca_landmark_path
+
+    default_standard_landmark_path = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl"
+    standard_landmark_path = os.getenv('FIG_STANDARD_LANDMARK_PATH')
+    standard_landmark_path = standard_landmark_path if standard_landmark_path is not None else default_standard_landmark_path
+    config['standard_landmark_path'] = standard_landmark_path
+
+    default_face_root_path = "/media/tuantran/rapid-data/dataset/GRID/face_images_128"
+    face_root_path = os.getenv('FIG_FACE_ROOT_PATH')
+    face_root_path = face_root_path if face_root_path is not None else default_face_root_path
+    config['face_root_path'] = face_root_path
+
+    default_output_path = "./face_decoder_output"
+    output_path = os.getenv('FIG_OUTPUT_PATH')
+    output_path = output_path if output_path is not None else default_output_path
+    config['output_path'] = output_path
+
+    default_pretrained_model_folder = "./face_decoder_output/models/final"
+    pretrained_model_folder = os.getenv('FIG_PRETRAINED_MODEL_FOLDER')
+    pretrained_model_folder = pretrained_model_folder if pretrained_model_folder is not None else default_pretrained_model_folder
+    pretrained_model_paths = {}
+    if os.path.exists(pretrained_model_folder):
+        lst = set(os.listdir(pretrained_model_folder))
+        for name in ['generator', 'discriminator']:
+            filename = name + '.pt'
+            if filename not in lst:
+                break
+            pretrained_model_paths[name] = os.path.join(pretrained_model_folder, filename)
+    if len(pretrained_model_paths) == 2:
+        config['pretrained_model_paths'] = pretrained_model_paths
+
+    default_epochs = 20
+    epochs = os.getenv('FIG_EPOCHS')
+    epochs = int(epochs) if epochs is not None else default_epochs
+    config['epochs'] = epochs
+
+    default_epoch_offset = 1
+    epoch_offset = os.getenv('FIG_EPOCH_OFFSET')
+    epoch_offset = int(epoch_offset) if epoch_offset is not None else default_epoch_offset
+    config['epoch_offset'] = epoch_offset
+
+    default_batchsize = 5
+    batchsize = os.getenv('FIG_BATCHSIZE')
+    batchsize = int(batchsize) if batchsize is not None else default_batchsize
+    config['batchsize'] = batchsize
+
+    return config
+
 if __name__ == "__main__":
-    trainer = FaceGeneratorTrainer(device = "cuda:0")
+    config = get_config()
+    log.info("Running with config: {}".format(config))
+    trainer = FaceGeneratorTrainer(**config)
     trainer.start()
