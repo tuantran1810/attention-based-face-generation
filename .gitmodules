@@ -1,3 +1,3 @@
 [submodule "networks/pytorch_convolutional_rnn"]
 	path = networks/pytorch_convolutional_rnn
-	url = git@github.com:tuantran1810/pytorch_convolutional_rnn.git
+	url = https://github.com/tuantran1810/pytorch_convolutional_rnn.git
