@@ -205,7 +205,6 @@ class GansTrainer():
                 self.__reset_gradients()
 
                 self.__do_logging(epoch, i, metrics)
-                break
 
             log.info("start evaluating...")
             with torch.no_grad():
