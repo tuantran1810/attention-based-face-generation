@@ -409,7 +409,7 @@ class FaceGeneratorTrainer():
             'batch_size': batchsize,
             'shuffle': True,
             'num_workers': 6,
-            'drop_last': False,
+            'drop_last': True,
         }
         return DataLoader(train_dataset, **params), DataLoader(test_dataset, **params)
 
