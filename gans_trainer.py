@@ -312,11 +312,6 @@ class FaceGeneratorTrainer():
         )
 
     def __data_processing(self, item):
-        r = random.randint(6, 49)
-        window = 16
-        inspired_landmark = item['standard_landmark'][r]
-        inspired_landmark = inspired_landmark.reshape(1, -1)
-
         def process_pca_landmark(pca_landmarks, index):
             if index < 6:
                 raise Exception("invalid index")
@@ -336,8 +331,10 @@ class FaceGeneratorTrainer():
             landmark = torch.tensor(landmark).float()
             return landmark
 
-        landmarks = process_pca_landmark(item['generated_pca_landmark'], r)
-        inspired_landmark = process_inspired_landmark(item['standard_landmark'], r)
+        r_sequence, r_inspire = random.randint(6, 49), random.randint(6, 49)
+        window = 16
+        landmarks = process_pca_landmark(item['generated_pca_landmark'], r_sequence)
+        inspired_landmark = process_inspired_landmark(item['standard_landmark'], r_inspire)
 
         transform_ops = transforms.Compose([
             transforms.ToTensor(),
@@ -353,10 +350,11 @@ class FaceGeneratorTrainer():
                 image = transform_ops(image)
                 normalized_images.append(image)
             face_images = torch.stack(normalized_images)
-        inspired_image = face_images[r]
-        face_images = face_images[r+1:r+1+window].permute(1,0,2,3)
 
-        return ((item['identity'], item['code'], r+1), (landmarks, face_images), (inspired_landmark, inspired_image))
+        inspired_image = face_images[r_inspire]
+        face_images = face_images[r_sequence+1:r_sequence+1+window].permute(1,0,2,3)
+
+        return ((item['identity'], item['code'], r_sequence+1), (landmarks, face_images), (inspired_landmark, inspired_image))
 
     def __create_dataloader(
         self,
