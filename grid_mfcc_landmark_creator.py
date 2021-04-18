@@ -15,7 +15,7 @@ class MFCCLandmarkCreator():
         landmark_features = 7,
         model_path = "./model/landmark_decoder.pt",
         landmark_pca_path = "./grid_dataset/preprocessed/landmark_pca.pkl",
-        landmark_mean_path = "./grid_dataset/preprocessed/landmark_mean.pkl",
+        landmark_mean_path = "./grid_dataset/preprocessed/standard_landmark_mean.pkl",
         landmark_path = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
         mfcc_path = "/media/tuantran/raid-data/dataset/GRID/audio_50/mfcc.pkl",
         output_path = "/media/tuantran/raid-data/dataset/GRID/attention-based-face-generation/generated_pca_landmark_6_50.pkl",

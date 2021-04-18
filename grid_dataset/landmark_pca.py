@@ -8,7 +8,7 @@ class DataPCACalculator(object):
     def __init__(
         self,
         landmarks_data = "./preprocessed/raw_landmark.pkl",
-        landmark_mean_path = "./preprocessed/landmark_mean.pkl",
+        landmark_mean_path = "./preprocessed/standard_landmark_mean.pkl",
         output_file = "./preprocessed/landmark_pca.pkl"
     ):
         '''
@@ -64,7 +64,7 @@ class DataPCACalculator(object):
 def main():
     d = DataPCACalculator(
         landmarks_data = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
-        landmark_mean_path = "./preprocessed/landmark_mean.pkl",
+        landmark_mean_path = "./preprocessed/standard_landmark_mean.pkl",
         output_file = "./preprocessed/landmark_pca.pkl"
     )
     d.run()

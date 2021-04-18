@@ -4,29 +4,40 @@ from torch import nn, optim
 from torch.utils.data import DataLoader
 import numpy as np
 from framework.common_trainer import CommonTrainer
-from networks.trainer_interface import MelLandmarkDecoderTrainerInterface
+from networks.trainer_interface import LandmarkDecoderTrainerInterface, LandmarkMSELoss
 from utils.dataset import ArrayDataset
 from tqdm import tqdm
 from pathlib import Path
 from loguru import logger as log
 import matplotlib.pyplot as plt
 
+'''
+This training produce the test loss = 4.92e-4 at the 17th epoch
+'''
+
 class LandmarkPredictorTrainer():
     def __init__(self,
-        epochs = 100,
+        epochs = 20,
         epoch_offset = 1,
-        batchsize = 100,
-        lr = 0.001,
-        landmark_features = 136,
-        landmark_mean_path = "./grid_dataset/preprocessed/landmark_mean.pkl",
+        batchsize = 200,
+        lr = 0.0002,
+        landmark_features = 7,
+        landmark_pca_path = "./grid_dataset/preprocessed/landmark_pca.pkl",
+        landmark_mean_path = "./grid_dataset/preprocessed/standard_landmark_mean.pkl",
         landmark_path = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
-        mel_path = "/media/tuantran/raid-data/dataset/GRID/audio_50/mel.pkl",
-        output_path = "./mel_landmark_decoder_output",
+        mfcc_path = "/media/tuantran/raid-data/dataset/GRID/audio_50/mfcc.pkl",
+        output_path = "./landmark_decoder_output",
         device = "cpu"
     ):
-        self.__trainer = CommonTrainer(epochs, epoch_offset, log_interval_second = 30, device = device)
+        self.__trainer = CommonTrainer(epochs, epoch_offset, log_interval_second = 10, device = device)
         self.__device = device
         self.__output_path = output_path
+        
+        landmark_pca_metadata = None
+        with open(landmark_pca_path, 'rb') as fd:
+            landmark_pca_metadata = pickle.load(fd)
+        if landmark_pca_metadata is None:
+            raise Exception("cannot load pca metadata")
 
         landmark_mean = None
         with open(landmark_mean_path, 'rb') as fd:
@@ -35,15 +46,19 @@ class LandmarkPredictorTrainer():
             raise Exception("cannot load pca metadata")
         self.__landmark_mean = landmark_mean
 
-        self.__train_dataloader, self.__test_dataloader = self.__create_dataloader(landmark_path, mel_path, batchsize)
-        model = MelLandmarkDecoderTrainerInterface(landmark_features, device = device)
+        landmark_pca_metadata = landmark_pca_metadata[landmark_features]
+        self.__landmark_pca_mean = torch.tensor(landmark_pca_metadata["mean"]).to(device)
+        self.__landmark_pca_components = torch.tensor(landmark_pca_metadata["components"]).to(device)
+
+        self.__train_dataloader, self.__test_dataloader = self.__create_dataloader(landmark_path, mfcc_path, batchsize)
+        model = LandmarkDecoderTrainerInterface(landmark_features, self.__landmark_pca_mean, self.__landmark_pca_components, device = device)
 
         self.__trainer.inject_model(
             model,
         ).inject_optim(
             optim.Adam(model.parameters(), lr = lr)
         ).inject_loss_function(
-            torch.nn.MSELoss()
+            LandmarkMSELoss(self.__landmark_pca_mean, self.__landmark_pca_components.transpose(0, 1), y_padding = 3, device = device)
         ).inject_train_dataloader(
             self.__produce_train_data
         ).inject_test_dataloader(
@@ -54,14 +69,14 @@ class LandmarkPredictorTrainer():
             self.__save_model
         )
 
-    def __create_dataloader(self, landmarkpath, melpath, batchsize, training_percentage = 95):
+    def __create_dataloader(self, landmarkpath, mfccpath, batchsize, training_percentage = 95):
         landmark_data = None
         with open(landmarkpath, 'rb') as fd:
             landmark_data = pickle.load(fd)
 
-        mel_data = None
-        with open(melpath, 'rb') as fd:
-            mel_data = pickle.load(fd)
+        mfcc_data = None
+        with open(mfccpath, 'rb') as fd:
+            mfcc_data = pickle.load(fd)
 
 
         data = []
@@ -69,7 +84,7 @@ class LandmarkPredictorTrainer():
             for code, lm in idmap.items():
                 data.append({
                     'landmarks': lm, 
-                    'mel': mel_data[identity][code],
+                    'mfcc': mfcc_data[identity][code],
                 })
 
         random.shuffle(data)
@@ -79,21 +94,23 @@ class LandmarkPredictorTrainer():
         testing = data[n_training:]
 
         def data_processing(item):
-            mel = item['mel']
-            mel_d = np.diff(mel, n=1, axis=0)
-            mel_dd = np.insert(np.diff(mel, n=2, axis=0), 0, np.zeros((1, 64)), axis=0)
-            mel = np.concatenate((mel_d, mel_dd), axis = 1)
-            mel = torch.tensor(mel).float().unsqueeze(0)
+            r = random.choice([x for x in range(6,50)])
+            window = 16
+            mfcc = item['mfcc']
+            start_mfcc = (r - 3) * 4
+            end_mfcc = (r + window + 3) * 4
+            mfcc = mfcc.transpose(1, 0)[1:, start_mfcc:end_mfcc]
+            mfcc = torch.tensor(mfcc).float().unsqueeze(0)
 
-            landmarks = item['landmarks'] - self.__landmark_mean
+            landmarks = item['landmarks']
+            landmarks = landmarks - self.__landmark_mean
             frames = landmarks.shape[0]
             landmarks = landmarks.reshape(frames, -1)
-            landmarks = torch.tensor(landmarks)
+            landmarks = torch.tensor(landmarks).float()
 
-            inspired_landmark = landmarks[3,:]
-            landmarks = landmarks[3:-1]
-
-            return ((mel, inspired_landmark), landmarks)
+            inspired_landmark = landmarks[r,:]
+            landmarks = landmarks[r+1:r+1+window]
+            return ((mfcc, inspired_landmark), landmarks)
 
         train_dataset = ArrayDataset(training, data_processing)
         test_dataset = ArrayDataset(testing, data_processing)
@@ -122,7 +139,7 @@ class LandmarkPredictorTrainer():
             yield ((mfcc, inspired_landmark), landmarks)
 
     def __save_model(self, epoch, model):
-        if epoch < 10:
+        if epoch < 7:
             return
         log.info(f"saving model for epoch {epoch}")
         models_folder = "models"
@@ -139,27 +156,23 @@ class LandmarkPredictorTrainer():
         epoch_folder = "epoch_{}".format(epoch)
         folder_path = os.path.join(self.__output_path, data_folder, epoch_folder)
         Path(folder_path).mkdir(parents=True, exist_ok=True)
-        loss = nn.functional.mse_loss(y, yhat)
-        log.info(f"mse loss: {loss}")
-        yhat = yhat.detach().to("cpu").numpy()
-        y = y.detach().to("cpu").numpy()
         for i in range(2):
-            fig, axes = plt.subplots(7,10)
-            for j in range(70):
-                row = j//10
-                col = j%10
+            fig, axes = plt.subplots(4,4)
+            for j in range(16):
+                row = j//4
+                col = j%4
                 ax = axes[row][col]
-                predicted_lm = yhat[i][j].reshape(68,2) + self.__landmark_mean
-                actual_lm = y[i][j].reshape(68, 2) + self.__landmark_mean
+                predicted_lm = torch.matmul(yhat[i][j], self.__landmark_pca_components) + self.__landmark_pca_mean
+                predicted_lm = predicted_lm.detach().to("cpu").numpy().reshape(68,2) + self.__landmark_mean
+                actual_lm = y[i][j].reshape(68, 2).detach().to("cpu").numpy() + self.__landmark_mean
                 ax.scatter(actual_lm[:,0], actual_lm[:,1], c = 'black', s = 0.2)
                 ax.scatter(predicted_lm[:,0], predicted_lm[:,1], c = 'red', s = 0.2)
                 ax.axis('off')
             image_path = os.path.join(folder_path, "landmark_{}.png".format(i))
-            fig.set_figheight(7)
-            fig.set_figwidth(10)
-            plt.savefig(image_path, dpi = 300)
+            fig.set_figheight(5)
+            fig.set_figwidth(5)
+            plt.savefig(image_path, dpi = 500)
             plt.close()
-
 
     def start(self):
         self.__trainer.train()

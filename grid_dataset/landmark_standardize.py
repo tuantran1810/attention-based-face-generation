@@ -3,33 +3,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pickle import dump, load
 from tqdm import tqdm
+from scipy.spatial import procrustes
 
-class LandmarkStandardize(object):
+
+class LandmarkTransformation(object):
     def __init__(
-        self,
-        inputlandmark = "./preprocessed/raw_landmark.pkl",
-        outputpath = "./preprocessed/standard_landmark.pkl",
+        self, mean_face,
     ):
-        '''
-        self.__paths: map[identity]pathsList
-        '''
-        self.__outputpath = outputpath
-        self.__input_map = {}
-        with open(inputlandmark, 'rb') as fd:
-            self.__input_map = load(fd)
-        del self.__input_map['mean']
-
-        array = []
-        for identity, identity_map in self.__input_map.items():
-            for code, video_path in identity_map.items():
-                landmark = self.__input_map[identity][code]
-                landmark = np.mean(landmark, axis = 0)
-                array.append(landmark)
-        array = np.stack(array)
-        mean_face = np.mean(array, axis = 0)
-        mean_face = self.__align_eye_points(np.expand_dims(mean_face, 0))
-        mean_face = mean_face[0]
-        self.__mean_shape = mean_face
+        self.__mean_shape = self.align_eye_points(np.expand_dims(mean_face, 0))[0]
 
     def __similarity_transform(self, in_points, out_points):
         s60 = math.sin(60*math.pi/180)
@@ -58,7 +39,7 @@ class LandmarkStandardize(object):
         transformed = np.float32(np.reshape(transformed, (68, 2)))
         return transformed
 
-    def __align_eye_points(self, landmark_sequence):
+    def align_eye_points(self, landmark_sequence):
         aligned_sequence = copy.deepcopy(landmark_sequence)
         eyecorner_dst = [ (np.float(0.3), np.float(1/3)), (np.float(0.7), np.float(1/3)) ]
         for i, landmark in enumerate(aligned_sequence):
@@ -67,7 +48,7 @@ class LandmarkStandardize(object):
             aligned_sequence[i] = self.__transform_landmark(landmark, transform)
         return aligned_sequence
 
-    def __transfer_expression(self, landmark_sequence):
+    def transfer_expression(self, landmark_sequence):
         first_landmark = landmark_sequence[0,:,:]
         transform, _ = cv2.estimateAffine2D(first_landmark, self.__mean_shape, True)
 
@@ -84,12 +65,47 @@ class LandmarkStandardize(object):
         transfer_expression_seq = diff + mean_shape_seq
         return np.float32(transfer_expression_seq)
 
+    def get_mean_shape(self):
+        return self.__mean_shape
+
+    # def align_eyes_nose(self, landmark):
+
+
+    def transfer_single_landmark(self, landmark):
+        mtx1, mtx2, disparity = procrustes(self.__mean_shape, landmark)
+        return mtx2
+
+class LandmarkStandardize(object):
+    def __init__(
+        self,
+        inputlandmark = "./preprocessed/raw_landmark.pkl",
+        outputpath = "./preprocessed/standard_landmark.pkl",
+    ):
+        '''
+        self.__paths: map[identity]pathsList
+        '''
+        self.__outputpath = outputpath
+        self.__input_map = {}
+        with open(inputlandmark, 'rb') as fd:
+            self.__input_map = load(fd)
+        del self.__input_map['mean']
+
+        array = []
+        for identity, identity_map in self.__input_map.items():
+            for code, video_path in identity_map.items():
+                landmark = self.__input_map[identity][code]
+                landmark = np.mean(landmark, axis = 0)
+                array.append(landmark)
+        array = np.stack(array)
+        mean_face = np.mean(array, axis = 0)
+        self.__landmark_transformation = LandmarkTransformation(mean_face)
+
     def run(self):
         for identity, identity_map in tqdm(self.__input_map.items()):
             for code, video_path in tqdm(identity_map.items()):
                 landmarks = self.__input_map[identity][code]
-                landmarks = self.__align_eye_points(landmarks)
-                output_landmarks = self.__transfer_expression(landmarks)
+                landmarks = self.__landmark_transformation.align_eye_points(landmarks)
+                output_landmarks = self.__landmark_transformation.transfer_expression(landmarks)
                 self.__input_map[identity][code] = output_landmarks
         with open(self.__outputpath, 'wb') as fd:
             dump(self.__input_map, fd)

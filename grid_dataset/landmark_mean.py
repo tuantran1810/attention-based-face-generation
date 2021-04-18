@@ -8,7 +8,7 @@ class LandmarkMeanCalculator(object):
     def __init__(
         self,
         landmarks_data = "./preprocessed/raw_landmark.pkl",
-        output_file = "./preprocessed/landmark_mean.pkl"
+        output_file = "./preprocessed/raw_landmark_mean.pkl"
     ):
         '''
         self.__paths: map[identity]pathsList
@@ -22,6 +22,7 @@ class LandmarkMeanCalculator(object):
     def run(self):
         lst = []
         for k, lmp in self.__landmark_map.items():
+            if k == 'mean': continue
             for _, landmarks in lmp.items():
                 mlandmark = np.mean(landmarks, axis = 0)
                 lst.append(mlandmark)
@@ -39,7 +40,14 @@ class LandmarkMeanCalculator(object):
 
 def main():
     d = LandmarkMeanCalculator(
+        landmarks_data = "/media/tuantran/raid-data/dataset/GRID/raw_landmark.pkl",
+        output_file = "./preprocessed/raw_landmark_mean.pkl"
+    )
+    d.run()
+
+    d = LandmarkMeanCalculator(
         landmarks_data = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
+        output_file = "./preprocessed/standard_landmark_mean.pkl"
     )
     d.run()
 

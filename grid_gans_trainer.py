@@ -270,7 +270,7 @@ class FaceGeneratorTrainer():
         lr = 0.0002,
         landmark_features = 7,
         landmark_pca_path = "./grid_dataset/preprocessed/landmark_pca.pkl",
-        landmark_mean_path = "./grid_dataset/preprocessed/landmark_mean.pkl",
+        landmark_mean_path = "./grid_dataset/preprocessed/standard_landmark_mean.pkl",
         generated_pca_landmark_path = "/media/tuantran/raid-data/dataset/GRID/attention-based-face-generation/generated_pca_landmark_6_50.pkl",
         standard_landmark_path = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
         face_root_path = "/media/tuantran/rapid-data/dataset/GRID/face_images_128",
