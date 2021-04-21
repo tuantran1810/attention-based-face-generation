@@ -65,15 +65,12 @@ class LandmarkTransformation(object):
         transfer_expression_seq = diff + mean_shape_seq
         return np.float32(transfer_expression_seq)
 
-    def get_mean_shape(self):
-        return self.__mean_shape
-
-    # def align_eyes_nose(self, landmark):
-
-
-    def transfer_single_landmark(self, landmark):
-        mtx1, mtx2, disparity = procrustes(self.__mean_shape, landmark)
-        return mtx2
+    def transfer_expression_single_frame(self, landmark):
+        landmark_trans = landmark[27:48,:]
+        mean_landmark_trans = self.__mean_shape[27:48,:]
+        transform, _ = self.__similarity_transform(landmark_trans, mean_landmark_trans)
+        output = self.__transform_landmark(landmark, transform)
+        return output
 
 class LandmarkStandardize(object):
     def __init__(

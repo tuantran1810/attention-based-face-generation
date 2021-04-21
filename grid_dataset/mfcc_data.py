@@ -4,13 +4,25 @@ from pickle import dump
 import python_speech_features
 from tqdm import tqdm
 
+class MFCCProcessor():
+    def __init__(self, sampling_rate = 16000):
+        self.__sampling_rate = sampling_rate
+
+    def to_mfcc(self, audio):
+        audio = np.append(audio, np.zeros(self.__sampling_rate//100))
+        mfcc = python_speech_features.mfcc(audio, self.__sampling_rate, winstep = 0.01)
+        return mfcc
+
+    def mfcc_from_path(self, audio_path):
+        audio, sr = librosa.load(audio_path, sr = self.__sampling_rate)
+        return self.to_mfcc(audio)
+
 class MFCCData(object):
     def __init__(
         self,
         audiorootfolder = "./sample_audio",
         outputpath = "./preprocessed/mfcc.pkl",
         audio_ext = "wav",
-        sound_features = 12,
     ):
         self.__paths = dict()
 
@@ -24,14 +36,8 @@ class MFCCData(object):
             if len(audiomap) > 0:
                 self.__paths[identity] = audiomap
 
-        self.__sound_features = sound_features
         self.__outputpath = outputpath
-
-    def __sound_mfcc(self, audio_path, nframes = 75):
-        audio, sr = librosa.load(audio_path, sr = 16000)
-        audio = np.append(audio, np.zeros(160))
-        mfcc = python_speech_features.mfcc(audio, 16000, winstep = 0.01)
-        return mfcc
+        self.__processor = MFCCProcessor()
 
     def run(self):
         final = {}
@@ -39,12 +45,11 @@ class MFCCData(object):
             if identity not in final:
                 final[identity] = {}
             for code, path in tqdm(identity_map.items()):
-                mfcc = self.__sound_mfcc(path, nframes = 75)
+                mfcc = self.__processor.mfcc_from_path(path)
                 if mfcc.shape[0] != 300:
                     print("invalid audio: {}".format(path))
                     continue
                 final[identity][code] = mfcc
-                # print("processed for : {} --- {}".format(identity, code))
         with open(self.__outputpath, 'wb') as fd:
             dump(final, fd)
 

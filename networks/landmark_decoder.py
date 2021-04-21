@@ -49,8 +49,8 @@ class LandmarkDecoder(nn.Module):
         mfcc_array = torch.cat(mfcc_array, dim = 1)
 
         hidden = (
-            torch.autograd.Variable(torch.zeros(3, mfcc.size(0), 256).cuda()),
-            torch.autograd.Variable(torch.zeros(3, mfcc.size(0), 256).cuda()),
+            torch.autograd.Variable(torch.zeros(3, mfcc.size(0), 256).to(self.__device)),
+            torch.autograd.Variable(torch.zeros(3, mfcc.size(0), 256).to(self.__device)),
         )
         out, _ = self.__landmark_lstm(mfcc_array, hidden)
         
