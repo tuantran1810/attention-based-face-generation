@@ -139,7 +139,7 @@ class GridDemo:
         mfccs = torch.tensor(mfccs).to(self.__device)
         mfccs = mfccs.unsqueeze(1)
         generated_landmarks = None
-        self.__landmark_decoder.eval()
+        # self.__landmark_decoder.eval()
         with torch.no_grad():
             generated_landmarks = self.__landmark_decoder.forward(landmarks.float(), mfccs.float())
         generated_landmarks = generated_landmarks.to("cpu").detach().numpy()
@@ -279,7 +279,7 @@ def main():
         images_path,
         audios_path,
         output_path,
-        device = "cpu"
+        device = "cuda:0"
     )
 
     demo.preprocess().infer_landmark().to_image_sequence().to_video().to_audio().to_final_video()

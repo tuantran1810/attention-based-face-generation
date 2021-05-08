@@ -331,7 +331,8 @@ class FaceGeneratorTrainer():
             landmark = torch.tensor(landmark).float()
             return landmark
 
-        r_sequence, r_inspire = random.randint(6, 49), random.randint(6, 49)
+        r = random.randint(6, 49)
+        r_sequence, r_inspire = r, r
         window = 16
         landmarks = process_pca_landmark(item['generated_pca_landmark'], r_sequence)
         inspired_landmark = process_inspired_landmark(item['standard_landmark'], r_inspire)
