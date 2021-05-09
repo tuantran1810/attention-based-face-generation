@@ -70,7 +70,7 @@ class LandmarkTransformation(object):
         mean_landmark_trans = self.__mean_shape[27:48,:]
         transform, _ = self.__similarity_transform(landmark_trans, mean_landmark_trans)
         output = self.__transform_landmark(landmark, transform)
-        return output
+        return output, transform
 
 class LandmarkStandardize(object):
     def __init__(

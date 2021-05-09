@@ -111,12 +111,17 @@ class GridDemo:
 
             landmark = self.__raw_landmark_processor.get_landmark(image)
             landmark = self.__landmark_transformation.align_eye_points(landmark)
-            landmark = self.__landmark_transformation.transfer_expression_single_frame(landmark[0])
+            landmark, transform = self.__landmark_transformation.transfer_expression_single_frame(landmark[0])
+
+            image = image[0]
+            image = image.transpose(1,2,0)
+            image = cv2.warpAffine(image, transform, (128,128))
+            image = image.transpose(2,0,1)
 
             mfcc = self.__mfcc_processor.mfcc_from_path(value['audio'])
             mfcc = mfcc.transpose(1,0)[1:,:]
 
-            image_array.append(image[0])
+            image_array.append(image)
             landmark_array.append(landmark)
             mfcc_array.append(mfcc)
 
@@ -282,7 +287,13 @@ def main():
         device = "cuda:0"
     )
 
-    demo.preprocess().infer_landmark().to_image_sequence().to_video().to_audio().to_final_video()
+    demo\
+    .preprocess()\
+    .infer_landmark()\
+    .to_image_sequence()\
+    .to_video()\
+    .to_audio()\
+    .to_final_video()
 
 if __name__ == "__main__":
     main()
