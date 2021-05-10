@@ -1,0 +1,5 @@
+Disk reference: 6055553418483590269 
+Channel: BBC One HD 
+Program start: 2014-09-05 13:00:00 +0100 
+Clip start: 765.84 seconds 
+Duration: 0.47 seconds 

@@ -4,7 +4,6 @@ from os import path
 from pathlib import Path
 import matplotlib.pyplot as plt
 from facenet_pytorch import MTCNN
-from mobilenet.mobile_net import MobileNetInference224
 import numpy as np
 from pickle import dump
 from compress_pickle import dump as cdump

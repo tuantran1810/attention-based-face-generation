@@ -1,0 +1,5 @@
+Disk reference: 5747537261870550834 
+Channel: BBC One HD 
+Program start: 2012-05-28 13:00:00 +0100 
+Clip start: 1021.12 seconds 
+Duration: 0.37 seconds 
