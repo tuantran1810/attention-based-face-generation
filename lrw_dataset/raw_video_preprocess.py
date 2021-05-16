@@ -1,28 +1,46 @@
-import cv2, sys, os, dlib
+import cv2, sys, os, dlib, math, traceback, copy
 sys.path.append(os.path.dirname(__file__))
-from os import path
-from pathlib import Path
-import matplotlib.pyplot as plt
 import numpy as np
-from pickle import dump
-from compress_pickle import dump as cdump
+from pickle import dump, load
 from tqdm import tqdm
 
 class RawFaceDataProcessor(object):
     def __init__(
         self,
-        face_expected_ratio = "1:1",
-        horizontal_landmark_scale = 2.2,
-        device = 'cpu',
+        standard_landmark_mean = './preprocessed/standard_landmark_mean.pkl',
     ):
-        self.__device = device
-        fw, fh = face_expected_ratio.split(':')
-        self.__faceratiowh = int(fw)/int(fh)
-
         self.__frontal_face_detector = dlib.get_frontal_face_detector()
         self.__landmark_detector = dlib.shape_predictor("./shape_predictor_68_face_landmarks.dat")
-        self.__horizontal_landmark_scale = horizontal_landmark_scale
+        self.__standard_landmark_mean = None
+        with open(standard_landmark_mean, 'rb') as fd:
+            self.__standard_landmark_mean = load(fd)
 
+    def __similarity_transform(self, in_points, out_points):
+        s60 = math.sin(60*math.pi/180)
+        c60 = math.cos(60*math.pi/180)
+
+        in_points = np.copy(in_points).tolist()
+        in_1_x, in_1_y = in_points[0]
+        in_2_x, in_2_y = in_points[1]
+        out_points = np.copy(out_points).tolist()
+        out_1_x, out_1_y = out_points[0]
+        out_2_x, out_2_y = out_points[1]
+
+        xin = c60*(in_1_x - in_2_x) - s60*(in_1_y - in_2_y) + in_2_x
+        yin = s60*(in_1_x - in_2_x) + c60*(in_1_y - in_2_y) + in_2_y
+        in_points.append([xin, yin])
+
+        xout = c60*(out_1_x - out_2_x) - s60*(out_1_y - out_2_y) + out_2_x
+        yout = s60*(out_1_x - out_2_x) + c60*(out_1_y - out_2_y) + out_2_y
+        out_points.append([xout, yout])
+
+        return cv2.estimateAffine2D(np.array([in_points]), np.array([out_points]), False)
+
+    def __transform_landmark(self, landmark, transform):
+        transformed = np.reshape(np.array(landmark), (68, 1, 2))
+        transformed = cv2.transform(transformed, transform)
+        transformed = np.float32(np.reshape(transformed, (68, 2)))
+        return transformed
 
     def resize_batch(self, frames, size):
         tmp_frames = []
@@ -33,156 +51,109 @@ class RawFaceDataProcessor(object):
         frames = np.concatenate(tmp_frames, axis = 0)
         return frames
 
+    def __calculate_avg_rect(self, rect_array):
+        tlx, tly, brx, bry = 0,0,0,0
+        cnt = 0
+        for rect in rect_array:
+            if len(rect) == 0:
+                continue
+            rect = rect[0]
+            tl = rect.tl_corner()
+            br = rect.br_corner()
+            tlx += tl.x
+            tly += tl.y
+            brx += br.x
+            bry += br.y
+            cnt += 1
+        tlx, tly, brx, bry = int(tlx/cnt), int(tly/cnt), int(brx/cnt), int(bry/cnt)
+        return dlib.rectangle(tlx, tly, brx, bry)
+
     def __detect_landmark(self, frame, rect, dtype="int"):
-        assert len(rect) >= 1
-        shape = self.__landmark_detector(frame, rect[0])
+        shape = self.__landmark_detector(frame, rect)
         coords = np.zeros((68, 2), dtype=dtype)
         for i in range(0, 68):
             coords[i] = (shape.part(i).x, shape.part(i).y)
-        return coords
+        tl = rect.tl_corner()
+        br = rect.br_corner()
+        center = np.array([(tl.x + br.x)/2, (tl.y + br.y)/2])
+        wh = np.array([br.x - tl.x, br.y - tl.y])
+        coords = (coords - center)/wh + 0.5
+        face = frame[tl.x:br.x,tl.y:br.y]
+        return coords, cv2.resize(face, (128,128))
+
+    def align_eye_points(self, landmark_sequence):
+        aligned_sequence = copy.deepcopy(landmark_sequence)
+        eyecorner_dst = [ (np.float(0.3), np.float(1/3)), (np.float(0.7), np.float(1/3)) ]
+        for i, landmark in enumerate(aligned_sequence):
+            eyecorner_src  = [ (landmark[36, 0], landmark[36, 1]), (landmark[45, 0], landmark[45, 1]) ]
+            transform, _ = self.__similarity_transform(eyecorner_src, eyecorner_dst)
+            aligned_sequence[i] = self.__transform_landmark(landmark, transform)
+        return aligned_sequence
+
+    def transfer_expression(self, landmark_sequence):
+        first_landmark = landmark_sequence[0,:,:]
+        transform, _ = cv2.estimateAffine2D(first_landmark, self.__standard_landmark_mean, True)
+
+        sx = np.sign(transform[0,0])*np.sqrt(transform[0,0]**2 + transform[0,1]**2)
+        sy = np.sign(transform[1,0])*np.sqrt(transform[1,0]**2 + transform[1,1]**2)
+
+        zero_vector = np.zeros((1, 68, 2))
+        diff = np.cumsum(np.insert(np.diff(landmark_sequence, n=1, axis=0), 0, zero_vector, axis=0), axis=0)
+        mean_shape_seq = np.tile(np.reshape(self.__standard_landmark_mean, (1, 68, 2)), [landmark_sequence.shape[0], 1, 1])
+
+        diff[:, :, 0] = abs(sx)*diff[:, :, 0]
+        diff[:, :, 1] = abs(sy)*diff[:, :, 1]
+
+        transfer_expression_seq = diff + mean_shape_seq
+        return np.float32(transfer_expression_seq)
 
     def crop_face(self, frames):
-        frame_array = []
+        import time
         rect_array = []
+        t1 = time.time()
         for frame in frames:
-            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            frame_array.append(frame)
-            rect = self.__frontal_face_detector(frame, 0)
+            rect = self.__frontal_face_detector(frame, 1)
             rect_array.append(rect)
+        avg_rect = self.__calculate_avg_rect(rect_array)
+        t2 = time.time()
+        # print(f"face detection in: {t2-t1}")
 
-        assert len(rect_array) == len(frame_array)
-        for i, rect in enumerate(rect_array):
-            frame = frame_array[i]
-            landmark = self.__detect_landmark(frame, rect)
-            for point in landmark:
-                cv2.circle(frame, point, 2, (255,0,0), 2)
-            # rect = rect[0].rect
-            tl = rect[0].tl_corner()
-            br = rect[0].br_corner()
-            cv2.rectangle(frame, (tl.x, tl.y), (br.x, br.y), (0,255,0), 2)
-            
-            plt.figure()
-            plt.imshow(frame)
-            plt.show()
-            plt.close()
-        # frame_array.append(frame)
-        # final = np.concatenate(frame_array)
-        # print(final.shape)
-        return frames
+        landmark_array = []
+        face_array = []
+        t3 = time.time()
+        for frame in frames:
+            landmark, face = self.__detect_landmark(frame, avg_rect)
+            landmark_array.append(landmark)
+            face_array.append(face)
+        t4 = time.time()
+        # print(f"face landmark in: {t4-t3}")
 
-
-        # _, _, landmarks = self.__face_dectector.detect(frames, landmarks = True)
-
-        # tmp_lmark = np.zeros((5, 2))
-        # cnt = 0.0
-        # for lm in landmarks:
-        #     if lm is None:
-        #         continue
-        #     tmp_lmark += lm[0]
-        #     cnt += 1.0
-        # if cnt < 1:
-        #     return None
-
-        # tmp_lmark = tmp_lmark/cnt
-        # left_eye, right_eye, nose, left_mouth, right_mouth = tmp_lmark
-        # x_nose, y_nose = nose
-
-        # avg_left = (left_eye + left_mouth) / 2.0
-        # avg_right = (right_eye + right_mouth) / 2.0
-        # d_nose_left, _ = nose - avg_left
-        # d_nose_right, _ = avg_right - nose
-        # x1 = int(x_nose - self.__horizontal_landmark_scale*d_nose_left)
-        # x2 = int(x_nose + self.__horizontal_landmark_scale*d_nose_right)
-
-        # dx = x2 - x1
-        # dy = int(dx/self.__faceratiowh)
-
-        # avg_eye = (left_eye + right_eye) / 2.0
-        # avg_mouth = (left_mouth + right_mouth) / 2.0
-        # _, d_eyes_nose = nose - avg_eye
-        # _, d_nose_mouth = avg_mouth - nose
-        # d_nose_y1 = int(dy*(d_eyes_nose/(d_eyes_nose + d_nose_mouth)))
-        # d_nose_y2 = dy - d_nose_y1
-        # y1 = int(y_nose - d_nose_y1)
-        # y2 = int(y_nose + d_nose_y2)
-        # frames = frames[:,y1:y2,x1:x2,:]
-        # return frames
+        landmarks = np.stack(landmark_array)
+        landmarks = self.align_eye_points(landmarks)
+        mean_landmark = np.mean(landmarks, axis=0)
+        landmark_trans = mean_landmark[27:48,:]
+        mean_landmark_trans = self.__standard_landmark_mean[27:48,:]
+        transformation, _ = self.__similarity_transform(landmark_trans, mean_landmark_trans)
+        landmark_array = []
+        for landmark in landmarks:
+            landmark = self.__transform_landmark(landmark, transformation)
+            landmark_array.append(landmark)
+        landmarks = self.transfer_expression(np.stack(landmark_array))
+        faces = np.stack(face_array).transpose(0,3,1,2)
+        tl = avg_rect.tl_corner()
+        br = avg_rect.br_corner()
+        return faces, landmarks, (tl.x, tl.y, br.x, br.y)
 
 class RawFaceData(object):
     def __init__(
         self,
-        videorootfolder = "./sample_videos",
-        plain_videos_outputpath = "./preprocessed/plain_videos",
-        video_ext = "mp4",
-        face_expected_ratio = "1:1",
-        horizontal_landmark_scale = 2.2,
-        output_w = 128,
-        device = 'cpu',
+        video_list_pkl = './preprocessed/list_0.pkl',
     ):
-        '''
-        self.__paths: map[identity]pathsList
-        '''
-
-        self.__device = device
-        self.__paths = dict()
-
-        for path, _ , files in os.walk(videorootfolder):
-            if len(files) == 0:
-                continue
-
-            segments = path.split('/')
-            utterance = segments[-2]
-            train_val_test = segments[-1]
-
-            if utterance not in self.__paths:
-                self.__paths[utterance] = dict()
-                self.__paths[utterance][train_val_test] = dict()
-            elif train_val_test not in self.__paths[utterance]:
-                self.__paths[utterance][train_val_test] = dict()
-
-            videomap = dict()
-            for name in files:
-                code, file_ext = name.split('.')
-                if file_ext == video_ext:
-                    videomap[code] = os.path.join(path, name)
-            self.__paths[utterance][train_val_test] = videomap
-
-        Path(plain_videos_outputpath).mkdir(parents = True, exist_ok = True)
-        for path, _ , files in os.walk(plain_videos_outputpath):
-            if len(files) == 0:
-                continue
-
-            segments = path.split('/')
-            utterance = segments[-2]
-            train_val_test = segments[-1]
-
-            if utterance not in self.__paths or train_val_test not in self.__paths[utterance]:
-                continue
-
-            videomap = self.__path[utterance][train_val_test]
-            for name in files:
-                code, file_ext = name.split('.')
-                if file_ext == video_ext:
-                    if code in videomap:
-                        print('{}/{}/{} existed'.format(utterance, train_val_test, code))
-                        self.__paths[utterance][train_val_test].pop(code, None)
-                        if len(self.__paths[utterance][train_val_test]) == 0:
-                            self.__paths[utterance].pop(train_val_test, None)
-                        if len(self.__paths[utterance]) == 0:
-                            self.__paths.pop(utterance, None)
-
-        self.__plain_videos_outputpath = plain_videos_outputpath
-        fw, fh = face_expected_ratio.split(':')
-        self.__faceratiowh = int(fw)/int(fh)
-        self.__output_w = output_w
-        self.__output_h = int(output_w/self.__faceratiowh)
-
-        self.__horizontal_landmark_scale = horizontal_landmark_scale
-        self.__processor = RawFaceDataProcessor(
-            face_expected_ratio = face_expected_ratio,
-            horizontal_landmark_scale = horizontal_landmark_scale,
-            device = device,
-        )
+        self.__processor = RawFaceDataProcessor()
+        self.__video_list_pkl = video_list_pkl
+        self.__list = None
+        with open(video_list_pkl, 'rb') as fd:
+            self.__list = load(fd)
 
     def __iterate_frames(self, videofile):
         vidcap = cv2.VideoCapture(videofile)
@@ -202,46 +173,43 @@ class RawFaceData(object):
         frames = np.concatenate(frames, axis = 0)
         return frames
 
-    def __produce_file(self, outputpath, faces, identity, code):
-        image_mp = {}
-        image_mp['identity'] = identity
-        image_mp['code'] = code
-        image_mp['faces'] = faces
-        filename = '{}.gzip'.format(code)
-        filepath = os.path.join(outputpath, identity, filename)
-        with open(filepath, 'wb') as fd:
-            cdump(image_mp, fd, compression = 'gzip')
+    def __produce_file(self):
+        with open(self.__video_list_pkl, 'wb') as fd:
+            dump(self.__list, fd)
 
     def run(self):
-        for utterance, utterance_map in tqdm(self.__paths.items()):
-            utterance_path = os.path.join(self.__plain_videos_outputpath, utterance)
-            Path(utterance_path).mkdir(parents = True, exist_ok = True)
+        cnt = 1
+        for utterance, utterance_map in tqdm(self.__list.items()):
             for train_val_test, code_map in utterance_map.items():
-                train_val_test_path = os.path.join(utterance_path, train_val_test)
-                Path(train_val_test_path).mkdir(parents = True, exist_ok = True)
-                for code, video_path in code_map.items():
-                    frames = self.__video_frames(video_path)
-                    if frames is None:
-                        print("invalid video: {}".format(video_path))
+                for code, video_metadata in code_map.items():
+                    video_path = video_metadata['path']
+                    ltrb = video_metadata['ltrb']
+                    landmark = video_metadata['landmark']
+                    if ltrb is not None and landmark is not None and len(landmark) == 29:
+                        print(f"{video_path} have been processed, by pass")
                         continue
-                    faces = self.__processor.crop_face(frames)
-                    # plt.figure()
-                    # plt.imshow(faces[10])
-                    # plt.show()
-                    # plt.close()
-                    # if faces is None or faces.shape[0] != 75:
-                    #     print("invalid faces or landmarks: {}".format(video_path))
-                    #     continue
-                    # faces = self.__processor.resize_batch(faces, (self.__output_w, self.__output_h)).transpose(0,3,1,2)
-                    print(video_path)
-                    # self.__produce_file(self.__image_outputpath, faces, identity, code)
+                    try:
+                        frames = self.__video_frames(video_path)
+                        if frames is None:
+                            print("invalid video: {}".format(video_path))
+                            continue
+                        _, landmarks, ltrb = self.__processor.crop_face(frames)
+                        video_metadata['ltrb'] = ltrb
+                        video_metadata['landmark'] = landmarks
+                    except Exception:
+                        traceback.print_exc(file=sys.stdout)
+                    cnt += 1
+                    if cnt % 1000 == 0:
+                        print(f"count = {cnt}, backup")
+                        self.__produce_file()
+        print("done")
+        self.__produce_file()
+
 
 def main():
-    d = RawFaceData(
-        # videorootfolder = "/media/tuantran/raid-data/dataset/GRID/video",
-        # plain_videos_outputpath = "/media/tuantran/rapid-data/dataset/GRID/face_images_128",
-        # device = 'cuda:0',
-    )
+    list_path = sys.argv[1]
+    print(f"data from path: {list_path}")
+    d = RawFaceData(video_list_pkl = list_path)
     d.run()
 
 if __name__ == "__main__":
