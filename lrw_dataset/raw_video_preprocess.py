@@ -3,6 +3,7 @@ sys.path.append(os.path.dirname(__file__))
 import numpy as np
 from pickle import dump, load
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 class RawFaceDataProcessor(object):
     def __init__(
@@ -107,38 +108,44 @@ class RawFaceDataProcessor(object):
         transfer_expression_seq = diff + mean_shape_seq
         return np.float32(transfer_expression_seq)
 
-    def crop_face(self, frames):
-        import time
-        rect_array = []
-        t1 = time.time()
-        for frame in frames:
-            rect = self.__frontal_face_detector(frame, 1)
-            rect_array.append(rect)
-        avg_rect = self.__calculate_avg_rect(rect_array)
-        t2 = time.time()
+    def crop_face(self, frames, avg_rect = None):
+        if avg_rect is None:
+            rect_array = []
+            for frame in frames:
+                rect = self.__frontal_face_detector(frame, 1)
+                rect_array.append(rect)
+            avg_rect = self.__calculate_avg_rect(rect_array)
         # print(f"face detection in: {t2-t1}")
 
         landmark_array = []
         face_array = []
-        t3 = time.time()
         for frame in frames:
             landmark, face = self.__detect_landmark(frame, avg_rect)
             landmark_array.append(landmark)
             face_array.append(face)
-        t4 = time.time()
         # print(f"face landmark in: {t4-t3}")
 
         landmarks = np.stack(landmark_array)
         landmarks = self.align_eye_points(landmarks)
-        mean_landmark = np.mean(landmarks, axis=0)
-        landmark_trans = mean_landmark[27:48,:]
-        mean_landmark_trans = self.__standard_landmark_mean[27:48,:]
-        transformation, _ = self.__similarity_transform(landmark_trans, mean_landmark_trans)
-        landmark_array = []
-        for landmark in landmarks:
-            landmark = self.__transform_landmark(landmark, transformation)
-            landmark_array.append(landmark)
-        landmarks = self.transfer_expression(np.stack(landmark_array))
+        # mean_landmark = np.mean(landmarks, axis=0)
+        # landmark_trans = mean_landmark[27:48,:]
+        # mean_landmark_trans = self.__standard_landmark_mean[27:48,:]
+        # transformation, _ = self.__similarity_transform(landmark_trans, mean_landmark_trans)
+        # landmark_array = []
+        # for landmark in landmarks:
+        #     landmark = self.__transform_landmark(landmark, transformation)
+        #     landmark_array.append(landmark)
+        # landmarks = np.stack(landmark_array)
+        landmarks = self.transfer_expression(landmarks)
+        # _, axes = plt.subplots(4,7)
+        # for i in range(28):
+        #     r = i//7
+        #     c = i%7
+        #     lm = landmarks[i]
+        #     axes[r][c].scatter(lm[:,0], lm[:,1])
+        # plt.show()
+        # plt.close()
+
         faces = np.stack(face_array).transpose(0,3,1,2)
         tl = avg_rect.tl_corner()
         br = avg_rect.br_corner()
@@ -193,7 +200,10 @@ class RawFaceData(object):
                         if frames is None:
                             print("invalid video: {}".format(video_path))
                             continue
-                        _, landmarks, ltrb = self.__processor.crop_face(frames)
+                        avg_rect = None
+                        if ltrb is not None:
+                            avg_rect = dlib.rectangle(*ltrb)
+                        _, landmarks, ltrb = self.__processor.crop_face(frames, avg_rect)
                         video_metadata['ltrb'] = ltrb
                         video_metadata['landmark'] = landmarks
                     except Exception:
