@@ -18,8 +18,8 @@ class LandmarkPredictorTrainer():
         epoch_offset = 1,
         batchsize = 200,
         lr = 0.0002,
-        landmark_pca_dims = 7,
-        landmark_pca_path = "./lrw_dataset/preprocessed/landmark_pca_7.pkl",
+        landmark_pca_dims = 30,
+        landmark_pca_path = "./lrw_dataset/preprocessed/landmark_pca_30.pkl",
         landmark_mean_path = "./lrw_dataset/preprocessed/standard_landmark_mean.pkl",
         landmark_path = "/media/tuantran/raid-data/dataset/LRW/attention-based-face-generation/list_data",
         mfcc_path = "/media/tuantran/raid-data/dataset/LRW/attention-based-face-generation/mfcc.pkl",
@@ -135,8 +135,8 @@ class LandmarkPredictorTrainer():
             })
 
         def data_processing(item):
-            r = 6
-            window = 16
+            r = 3
+            window = 23
             mfcc = item['mfcc']
             start_mfcc = (r - 3) * 4
             end_mfcc = (r + window + 3) * 4
@@ -198,10 +198,10 @@ class LandmarkPredictorTrainer():
         folder_path = os.path.join(self.__output_path, data_folder, epoch_folder)
         Path(folder_path).mkdir(parents=True, exist_ok=True)
         for i in range(2):
-            fig, axes = plt.subplots(4,4)
-            for j in range(16):
-                row = j//4
-                col = j%4
+            fig, axes = plt.subplots(3,8)
+            for j in range(23):
+                row = j//8
+                col = j%8
                 ax = axes[row][col]
                 predicted_lm = torch.matmul(yhat[i][j], self.__landmark_pca_components) + self.__landmark_pca_mean
                 predicted_lm = predicted_lm.detach().to("cpu").numpy().reshape(68,2) + self.__landmark_mean
@@ -210,8 +210,8 @@ class LandmarkPredictorTrainer():
                 ax.scatter(predicted_lm[:,0], predicted_lm[:,1], c = 'red', s = 0.2)
                 ax.axis('off')
             image_path = os.path.join(folder_path, "landmark_{}.png".format(i))
-            fig.set_figheight(5)
-            fig.set_figwidth(5)
+            fig.set_figheight(3)
+            fig.set_figwidth(8)
             plt.savefig(image_path, dpi = 500)
             plt.close()
 

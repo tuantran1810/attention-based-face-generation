@@ -91,6 +91,30 @@ class RawFaceDataProcessor(object):
             aligned_sequence[i] = self.__transform_landmark(landmark, transform)
         return aligned_sequence
 
+    def align_nose_mouth(self, landmark_sequence):
+        aligned_sequence = copy.deepcopy(landmark_sequence)
+        dst = np.stack([
+            self.__standard_landmark_mean[27],
+            self.__standard_landmark_mean[30],
+            self.__standard_landmark_mean[33],
+            self.__standard_landmark_mean[48],
+            self.__standard_landmark_mean[54],
+        ])
+        for i, landmark in enumerate(aligned_sequence):
+            src  = np.stack([
+                landmark[27],
+                landmark[30],
+                landmark[33],
+                landmark[48],
+                landmark[54],
+            ])
+            transform, _ = self.__similarity_transform(src, dst)
+            tmp = self.__transform_landmark(landmark, transform)
+            landmark[27:36] = tmp[27:36]
+            landmark[48:] = tmp[48:]
+            aligned_sequence[i] = landmark
+        return aligned_sequence
+
     def transfer_expression(self, landmark_sequence):
         first_landmark = landmark_sequence[0,:,:]
         transform, _ = cv2.estimateAffine2D(first_landmark, self.__standard_landmark_mean, True)
@@ -115,7 +139,6 @@ class RawFaceDataProcessor(object):
                 rect = self.__frontal_face_detector(frame, 1)
                 rect_array.append(rect)
             avg_rect = self.__calculate_avg_rect(rect_array)
-        # print(f"face detection in: {t2-t1}")
 
         landmark_array = []
         face_array = []
@@ -123,33 +146,32 @@ class RawFaceDataProcessor(object):
             landmark, face = self.__detect_landmark(frame, avg_rect)
             landmark_array.append(landmark)
             face_array.append(face)
-        # print(f"face landmark in: {t4-t3}")
 
         landmarks = np.stack(landmark_array)
         landmarks = self.align_eye_points(landmarks)
-        # mean_landmark = np.mean(landmarks, axis=0)
-        # landmark_trans = mean_landmark[27:48,:]
-        # mean_landmark_trans = self.__standard_landmark_mean[27:48,:]
-        # transformation, _ = self.__similarity_transform(landmark_trans, mean_landmark_trans)
-        # landmark_array = []
-        # for landmark in landmarks:
-        #     landmark = self.__transform_landmark(landmark, transformation)
-        #     landmark_array.append(landmark)
-        # landmarks = np.stack(landmark_array)
+        mean_landmark = np.mean(landmarks, axis=0)
+        landmark_trans = mean_landmark[27:48,:]
+        mean_landmark_trans = self.__standard_landmark_mean[27:48,:]
+        transformation, _ = self.__similarity_transform(landmark_trans, mean_landmark_trans)
+        landmark_array = []
+        for landmark in landmarks:
+            landmark = self.__transform_landmark(landmark, transformation)
+            landmark_array.append(landmark)
+        landmarks = np.stack(landmark_array)
         landmarks = self.transfer_expression(landmarks)
-        # _, axes = plt.subplots(4,7)
-        # for i in range(28):
-        #     r = i//7
-        #     c = i%7
-        #     lm = landmarks[i]
-        #     axes[r][c].scatter(lm[:,0], lm[:,1])
-        # plt.show()
-        # plt.close()
 
         faces = np.stack(face_array).transpose(0,3,1,2)
         tl = avg_rect.tl_corner()
         br = avg_rect.br_corner()
         return faces, landmarks, (tl.x, tl.y, br.x, br.y)
+
+    def replace_landmark_boundary(self, landmarks):
+        landmarks = copy.deepcopy(landmarks)
+        arr = []
+        for landmark in landmarks:
+            landmark[:27] = self.__standard_landmark_mean[:27]
+            arr.append(landmark)
+        return np.stack(arr)
 
 class RawFaceData(object):
     def __init__(
@@ -191,8 +213,9 @@ class RawFaceData(object):
                 for code, video_metadata in code_map.items():
                     video_path = video_metadata['path']
                     ltrb = video_metadata['ltrb']
-                    landmark = video_metadata['landmark']
-                    if ltrb is not None and landmark is not None and len(landmark) == 29:
+                    landmarks = video_metadata['landmark']
+
+                    if ltrb is not None and landmarks is not None and len(landmarks) == 29:
                         print(f"{video_path} have been processed, by pass")
                         continue
                     try:
@@ -204,6 +227,8 @@ class RawFaceData(object):
                         if ltrb is not None:
                             avg_rect = dlib.rectangle(*ltrb)
                         _, landmarks, ltrb = self.__processor.crop_face(frames, avg_rect)
+                        landmarks = self.__processor.align_nose_mouth(landmarks)
+                        landmarks = self.__processor.replace_landmark_boundary(landmarks)
                         video_metadata['ltrb'] = ltrb
                         video_metadata['landmark'] = landmarks
                     except Exception:

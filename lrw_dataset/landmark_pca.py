@@ -69,7 +69,7 @@ def main():
         metadata_list = paths,
         landmark_mean_path = "./preprocessed/standard_landmark_mean.pkl",
     )
-    d.run(7, "./preprocessed/landmark_pca_7.pkl")
+    d.run(30, "./preprocessed/landmark_pca_30.pkl")
 
 if __name__ == "__main__":
     main()

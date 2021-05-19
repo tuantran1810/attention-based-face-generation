@@ -16,6 +16,10 @@ from pathlib import Path
 from loguru import logger as log
 import matplotlib.pyplot as plt
 
+'''
+stop at epoch 7 with evaluation loss = 1.0656E-04
+'''
+
 class GansTrainer():
     def __init__(self,
         train_dataloader,
