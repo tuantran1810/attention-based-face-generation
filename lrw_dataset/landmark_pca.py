@@ -1,3 +1,4 @@
+import pickle
 import numpy as np
 from sklearn.decomposition import PCA
 from pickle import dump, load
@@ -7,7 +8,7 @@ import copy
 class DataPCACalculator(object):
     def __init__(
         self,
-        metadata_list = ["./preprocessed/list_0.pkl", "./preprocessed/list_1.pkl"],
+        landmark_path = '/media/tuantran/raid-data/dataset/LRW/attention-based-face-generation/standard_landmark_mobinet.pkl',
         landmark_mean_path = "./preprocessed/standard_landmark_mean.pkl",
     ):
         landmark_mean = None
@@ -18,26 +19,20 @@ class DataPCACalculator(object):
         landmark_mean = landmark_mean.astype(np.float32)
 
         lst = []
-        for metadata_file in metadata_list:
-            metadata = None
-            with open(metadata_file, 'rb') as fd:
-                metadata = load(fd)
-            print(f"loading: {metadata_file}")
-            for utterance, utterance_map in metadata.items():
-                if 'train' not in utterance_map:
-                    print(f"there is no train in {utterance}")
-                    continue
-                code_map = utterance_map['train']
-                for _, video_metadata in code_map.items():
-                    video_path = video_metadata['path']
-                    ltrb = video_metadata['ltrb']
-                    landmark = video_metadata['landmark']
-                    if video_path is None or ltrb is None or landmark is None or len(ltrb) != 4 or landmark.shape != (29,68,2):
-                        continue
-                    landmark -= landmark_mean
-                    frames = landmark.shape[0]
-                    landmark = landmark.reshape(frames, -1)
-                    lst.append(landmark)
+        all_landmarks = None
+        with open(landmark_path, 'rb') as fd:
+            all_landmarks = pickle.load(fd)
+
+        for utterance, utterance_map in all_landmarks.items():
+            if 'train' not in utterance_map:
+                print(f"there is no train in {utterance}")
+                continue
+            code_map = utterance_map['train']
+            for _, landmarks in code_map.items():
+                frames = landmarks.shape[0]
+                landmarks -= landmark_mean
+                landmarks = landmarks.reshape(frames, -1)
+                lst.append(landmarks)
         self.__all_landmarks = np.concatenate(lst, axis = 0)
 
     def __pca_map(self, data, components):
@@ -61,15 +56,8 @@ class DataPCACalculator(object):
             dump(mp, fd)
 
 def main():
-    paths = []
-    for i in range(6):
-        paths.append(f"/media/tuantran/raid-data/dataset/LRW/attention-based-face-generation/list_data/list_{i}.pkl")
-
-    d = DataPCACalculator(
-        metadata_list = paths,
-        landmark_mean_path = "./preprocessed/standard_landmark_mean.pkl",
-    )
-    d.run(30, "./preprocessed/landmark_pca_30.pkl")
+    d = DataPCACalculator()
+    d.run(8, "./preprocessed/landmark_pca_8.pkl")
 
 if __name__ == "__main__":
     main()

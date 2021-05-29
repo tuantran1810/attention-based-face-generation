@@ -18,10 +18,10 @@ class LandmarkPredictorTrainer():
         epoch_offset = 1,
         batchsize = 200,
         lr = 0.0002,
-        landmark_pca_dims = 30,
-        landmark_pca_path = "./lrw_dataset/preprocessed/landmark_pca_30.pkl",
+        landmark_pca_dims = 8,
+        landmark_pca_path = "./lrw_dataset/preprocessed/landmark_pca_8.pkl",
         landmark_mean_path = "./lrw_dataset/preprocessed/standard_landmark_mean.pkl",
-        landmark_path = "/media/tuantran/raid-data/dataset/LRW/attention-based-face-generation/list_data",
+        landmark_path = "/media/tuantran/raid-data/dataset/LRW/attention-based-face-generation/standard_landmark_mobinet.pkl",
         mfcc_path = "/media/tuantran/raid-data/dataset/LRW/attention-based-face-generation/mfcc.pkl",
         output_path = "./landmark_decoder_output",
         device = "cpu"
@@ -67,27 +67,14 @@ class LandmarkPredictorTrainer():
 
     def __load_landmarks(self, landmark_path, which_data):
         returned_data = dict()
-        for path, _ , files in os.walk(landmark_path):
-            for file in files:
-                if file.split('.')[-1] != 'pkl':
+        with open(landmark_path, 'rb') as fd:
+            landmark_map = pickle.load(fd)
+            for utterance in landmark_map:
+                if which_data not in landmark_map[utterance]:
                     continue
-                landmark_map = None
-                with open(os.path.join(path, file), 'rb') as fd:
-                    landmark_map = pickle.load(fd)
-                for utterance in landmark_map:
-                    if which_data not in landmark_map[utterance]:
-                        continue
-                    dataset = landmark_map[utterance][which_data]
-                    for code in dataset:
-                        if dataset[code] is None:
-                            print(f"none record for code {code}")
-                            continue
-                        if code in returned_data and returned_data[code] is not None:
-                            print(f"code {code} existed in data")
-                            continue
-                        tmp = dataset[code]
-                        assert 'landmark' in tmp
-                        returned_data[code] = tmp['landmark']
+                dataset = landmark_map[utterance][which_data]
+                for code, landmarks in dataset.items():
+                    returned_data[code] = landmarks
         return returned_data
 
     def __load_mfcc(self, mfcc_path, which_data):
@@ -180,7 +167,7 @@ class LandmarkPredictorTrainer():
             yield ((mfcc, inspired_landmark), landmarks)
 
     def __save_model(self, epoch, model):
-        if epoch < 7:
+        if epoch < 3:
             return
         log.info(f"saving model for epoch {epoch}")
         models_folder = "models"
@@ -197,7 +184,7 @@ class LandmarkPredictorTrainer():
         epoch_folder = "epoch_{}".format(epoch)
         folder_path = os.path.join(self.__output_path, data_folder, epoch_folder)
         Path(folder_path).mkdir(parents=True, exist_ok=True)
-        for i in range(2):
+        for i in range(10):
             fig, axes = plt.subplots(3,8)
             for j in range(23):
                 row = j//8
