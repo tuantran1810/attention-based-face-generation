@@ -435,8 +435,8 @@ class FaceGeneratorTrainer():
                     'ilm': olm[3], 
                 })
 
-        train_dataset = ArrayDataset(train_data[:40000], self.__data_processing)
-        test_dataset = ArrayDataset(test_data[:2000], self.__data_processing)
+        train_dataset = ArrayDataset(train_data, self.__data_processing)
+        test_dataset = ArrayDataset(test_data, self.__data_processing)
         params = {
             'batch_size': batchsize,
             'shuffle': True,
