@@ -463,7 +463,7 @@ def get_config():
     config['generated_pca_landmark_path'] = generated_pca_landmark_path
 
     default_original_landmark_path = "/media/tuantran/rapid-data/dataset/LRW/attention-based-face-generation/raw_landmark.pkl"
-    original_landmark_path = os.getenv('FIG_STANDARD_LANDMARK_PATH')
+    original_landmark_path = os.getenv('FIG_ORIGINAL_LANDMARK_PATH')
     original_landmark_path = original_landmark_path if original_landmark_path is not None else default_original_landmark_path
     config['original_landmark_path'] = original_landmark_path
 
