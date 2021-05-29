@@ -60,7 +60,7 @@ class GansTrainer():
         self.__grad_scaler_discriminator = GradScaler()
         self.__train_dataloader = train_dataloader
         self.__test_dataloader = test_dataloader
-        self.__landmark_loss_mask = torch.cat([torch.ones(96), torch.ones(40)*1000]).view(1, 1, 136).to(device)
+        self.__landmark_loss_mask = torch.cat([torch.ones(96), torch.ones(40)*100]).view(1, 1, 136).to(device)
 
         self.__output_path = output_path
         self.__last_log_time = None
