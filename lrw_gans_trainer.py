@@ -271,7 +271,7 @@ class GansTrainer():
                     'final_generator_loss': sum(final_generator_loss_arr)/cnt,
                 }
                 self.__metric_log(epoch, -1, metrics)
-            # self.__save_model(epoch)
+            self.__save_model(epoch)
 
 class FaceGeneratorTrainer():
     def __init__(self,
