@@ -143,20 +143,21 @@ class VideoStandardize(object):
                             tframe = tframe[tt:tb, tl:tr, :]
                             tframe = cv2.resize(tframe, (128,128))
 
-                            # oframes.append(frame)
+                            # oframes.append(cv2.resize(frame, (128,128)))
                             tframes.append(tframe)
 
                         # oframes = np.stack(oframes)
                         tframes = np.stack(tframes)
                         # frames = np.concatenate([tframes, oframes], axis=2)
 
-                        # _, axes = plt.subplots(4,7)
+                        # _, axes = plt.subplots(7,4)
                         # for i in range(28):
-                        #     r, c = i//7, i%7
+                        #     r, c = i//4, i%4
                         #     axe = axes[r][c]
-                        #     frame = tframes[i]
+                        #     frame = frames[i]
                         #     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                         #     axe.imshow(frame)
+                        #     axe.axis('off')
                         # plt.show()
                         # plt.close()
                         write_video(tframes, filename)

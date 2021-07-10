@@ -199,8 +199,10 @@ class StandardizeLandmarks(object):
                         #     axe = axes[r][c]
                         #     slm = standard_landmarks[i]
                         #     lm = landmarks[i]
-                        #     axe.scatter(lm[:,0] + 1.0, lm[:,1], c = 'b', s = 0.2)
-                        #     axe.scatter(slm[:,0], slm[:,1], c = 'r', s = 0.2)
+                        #     axe.scatter(lm[:,0] + 1.0, lm[:,1], c = 'b', s = 1)
+                        #     axe.scatter(slm[:,0], slm[:,1], c = 'r', s = 1)
+                        #     axe.invert_yaxis()
+                        #     axe.axis('off')
                         # plt.show()
                         # plt.close()
                     except Exception:

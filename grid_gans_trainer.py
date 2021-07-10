@@ -275,6 +275,7 @@ class FaceGeneratorTrainer():
         landmark_features = 7,
         landmark_pca_path = "./grid_dataset/preprocessed/landmark_pca.pkl",
         landmark_mean_path = "./grid_dataset/preprocessed/standard_landmark_mean.pkl",
+        dataset_path = "./grid_dataset/preprocessed/dataset_split.pkl",
         generated_pca_landmark_path = "/media/tuantran/raid-data/dataset/GRID/attention-based-face-generation/generated_pca_landmark_6_50.pkl",
         standard_landmark_path = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
         face_root_path = "/media/tuantran/rapid-data/dataset/GRID/face_images_128",
@@ -284,6 +285,7 @@ class FaceGeneratorTrainer():
     ):
         self.__device = device
         self.__output_path = output_path
+        self.__dataset_path = dataset_path
 
         landmark_pca_metadata = None
         with open(landmark_pca_path, 'rb') as fd:
@@ -302,7 +304,7 @@ class FaceGeneratorTrainer():
         self.__landmark_pca_mean = np.expand_dims(landmark_pca_metadata["mean"], 0)
         self.__landmark_pca_components = landmark_pca_metadata["components"]
 
-        train_dataloader, test_dataloader = self.__create_dataloader(generated_pca_landmark_path, standard_landmark_path, face_root_path, batchsize = batchsize)
+        train_dataloader, test_dataloader = self.__create_dataloader(generated_pca_landmark_path, standard_landmark_path, face_root_path, dataset_path, batchsize = batchsize)
         self.__trainer = GansTrainer(
             train_dataloader,
             test_dataloader,
@@ -366,8 +368,8 @@ class FaceGeneratorTrainer():
         generated_pca_landmark_path,
         standard_landmark_path,
         root_face_video_path,
+        dataset_path,
         batchsize,
-        training_percentage = 95,
         video_file_ext = 'gzip',
     ):
         generated_landmark_data = None
@@ -377,6 +379,10 @@ class FaceGeneratorTrainer():
         standard_landmark_data = None
         with open(standard_landmark_path, 'rb') as fd:
             standard_landmark_data = pickle.load(fd)
+
+        dataset_split = None
+        with open(dataset_path, 'rb') as fd:
+            dataset_split = pickle.load(fd)
 
         face_video_paths = dict()
         for path, _ , files in os.walk(root_face_video_path):
@@ -389,25 +395,31 @@ class FaceGeneratorTrainer():
             if len(videomap) > 0:
                 face_video_paths[identity] = videomap
 
-        data = []
-        for identity, idmap in generated_landmark_data.items():
-            for code, lm in idmap.items():
-                data.append({
-                    'identity': identity,
-                    'code': code,
-                    'generated_pca_landmark': lm, 
-                    'standard_landmark': standard_landmark_data[identity][code], 
-                    'video_path': face_video_paths[identity][code],
-                })
+        train_data = list()
+        val_data = list()
 
-        random.shuffle(data)
-        total_data = len(data)
-        n_training = int(total_data * (training_percentage/100.0))
-        training = data[:n_training]
-        testing = data[n_training:]
+        train_dataset = dataset_split['train']
+        val_dataset = dataset_split['val']
+        for identity, code in train_dataset:
+            train_data.append({
+                'identity': identity,
+                'code': code,
+                'generated_pca_landmark': generated_landmark_data[identity][code], 
+                'standard_landmark': standard_landmark_data[identity][code], 
+                'video_path': face_video_paths[identity][code],
+            })
 
-        train_dataset = ArrayDataset(training, self.__data_processing)
-        test_dataset = ArrayDataset(testing, self.__data_processing)
+        for identity, code in val_dataset:
+            val_data.append({
+                'identity': identity,
+                'code': code,
+                'generated_pca_landmark': generated_landmark_data[identity][code], 
+                'standard_landmark': standard_landmark_data[identity][code], 
+                'video_path': face_video_paths[identity][code],
+            })
+
+        train_dataset = ArrayDataset(train_data, self.__data_processing)
+        test_dataset = ArrayDataset(val_data, self.__data_processing)
         params = {
             'batch_size': batchsize,
             'shuffle': True,

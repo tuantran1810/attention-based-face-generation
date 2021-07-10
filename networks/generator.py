@@ -115,7 +115,7 @@ class Generator(nn.Module):
 
 if __name__ == "__main__":
     gen = Generator(device = 'cpu')
-    batchsize = 1
+    batchsize = 2
     orig_image = torch.ones(batchsize, 3, 128, 128)
     orig_landmark = torch.ones(batchsize, 136)
     gen_landmark = torch.ones(batchsize, 75, 136)

@@ -16,6 +16,11 @@ class RawFaceDataProcessor(object):
         with open(standard_landmark_mean, 'rb') as fd:
             self.__standard_landmark_mean = load(fd)
 
+        # plt.figure()
+        # plt.gca().invert_yaxis()
+        # plt.scatter(self.__standard_landmark_mean[:,0], self.__standard_landmark_mean[:,1])
+        # plt.show()
+
     def __similarity_transform(self, in_points, out_points):
         s60 = math.sin(60*math.pi/180)
         c60 = math.cos(60*math.pi/180)
