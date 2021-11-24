@@ -16,12 +16,10 @@ from networks.generator import Generator
 from networks.landmark_decoder import LandmarkDecoder
 from utils.media import vidwrite
 import scipy.io.wavfile as wav
-from grid_dataset.raw_face_data import RawFaceDataProcessor
-from grid_dataset.raw_landmark_data import RawLandmarkProcessor
-from grid_dataset.landmark_standardize import LandmarkTransformation
-from grid_dataset.mfcc_data import MFCCProcessor
+from lrw_dataset.raw_video_preprocess import RawFaceDataProcessor
+from lrw_dataset.mfcc_data import MFCCProcessor
 
-class GridDemo:
+class LRWDemo:
     def __init__(
         self,
         landmark_decoder_path,
@@ -29,10 +27,9 @@ class GridDemo:
         images_path,
         audios_path,
         output_path,
-        raw_landmark_mean_path = "./grid_dataset/preprocessed/raw_landmark_mean.pkl",
-        standard_landmark_mean_path = "./grid_dataset/preprocessed/standard_landmark_mean.pkl",
-        landmark_pca_path = "./grid_dataset/preprocessed/landmark_pca.pkl",
-        landmark_pca_features = 7,
+        standard_landmark_mean_path = "./lrw_dataset/preprocessed/standard_landmark_mean.pkl",
+        landmark_pca_path = "./lrw_dataset/preprocessed/landmark_pca_8.pkl",
+        landmark_pca_features = 8,
         image_ext = "png",
         audio_ext = "wav",
         device = "cpu"
@@ -42,16 +39,11 @@ class GridDemo:
         self.__landmark_decoder.load_state_dict(torch.load(landmark_decoder_path))
         self.__generator = Generator(device = device)
         self.__generator.load_state_dict(torch.load(generator_path))
-        self.__raw_face_processor = RawFaceDataProcessor(device = device)
-        self.__raw_landmark_processor = RawLandmarkProcessor(
-            model_path = './grid_dataset/mobilenet/mobilenet_224_model_best_gdconv_external.pth.tar',
-            device = device,
+        self.__raw_face_processor = RawFaceDataProcessor(
+            standard_landmark_mean = standard_landmark_mean_path,
+            landmark_predictor = "./lrw_dataset/shape_predictor_68_face_landmarks.dat",
         )
         self.__mfcc_processor = MFCCProcessor()
-
-        raw_landmark_mean = None
-        with open(raw_landmark_mean_path, 'rb') as fd:
-            raw_landmark_mean = pickle.load(fd)
 
         self.__standard_landmark_mean = None
         with open(standard_landmark_mean_path, 'rb') as fd:
@@ -61,11 +53,9 @@ class GridDemo:
         with open(landmark_pca_path, 'rb') as fd:
             pca_landmark_metadata = pickle.load(fd)
 
-        pca_landmark_metadata = pca_landmark_metadata[landmark_pca_features]
         self.__landmark_pca_mean = pca_landmark_metadata["mean"]
         self.__landmark_pca_components = pca_landmark_metadata["components"]
 
-        self.__landmark_transformation = LandmarkTransformation(raw_landmark_mean)
         self.__data_paths = {}
         for path, _ , files in os.walk(images_path):
             for file in files:
@@ -105,22 +95,12 @@ class GridDemo:
                 print(f"{key} does not have enough image/audio")
                 continue
             image = cv2.imread(value['image'])
-            image = np.expand_dims(image, 0)
-            image = self.__raw_face_processor.crop_face(image)
-            image = self.__raw_face_processor.resize_batch(image, (128,128)).transpose(0,3,1,2)
-
-            landmark = self.__raw_landmark_processor.get_landmark(image)
-            landmark = self.__landmark_transformation.align_eye_points(landmark)
-            landmark, transform = self.__landmark_transformation.transfer_expression_single_frame(landmark[0])
-
-            image = image[0]
-            image = image.transpose(1,2,0)
-            image = cv2.warpAffine(image, transform, (128,128))
+            landmark, image = self.__raw_face_processor.frame_normalize(image)
             image = image.transpose(2,0,1)
 
             mfcc = self.__mfcc_processor.mfcc_from_path(value['audio'])
+            mfcc = mfcc.transpose(1,0)[1:,:148]
             print(mfcc.shape)
-            mfcc = mfcc.transpose(1,0)[1:,:220]
 
             image_array.append(image)
             landmark_array.append(landmark)
@@ -322,13 +302,13 @@ class GridDemo:
 
 
 def main():
-    landmark_decoder_path = "./model/grid/landmark_decoder.pt"
-    generator_path = "./model/grid/generator.pt"
-    images_path = "./demo_grid/images/"
-    audios_path = "./demo_grid/audios/"
-    output_path = "./demo_grid/output/"
+    landmark_decoder_path = "./model/lrw/landmark_decoder.pt"
+    generator_path = "./model/lrw/generator.pt"
+    images_path = "./demo_lrw/images/"
+    audios_path = "./demo_lrw/audios/"
+    output_path = "./demo_lrw/output/"
 
-    demo = GridDemo(
+    demo = LRWDemo(
         landmark_decoder_path,
         generator_path,
         images_path,
@@ -344,6 +324,8 @@ def main():
     .to_video()\
     .to_audio()\
     .to_final_video()
+    # .to_image_file()\
+
 
 if __name__ == "__main__":
     main()

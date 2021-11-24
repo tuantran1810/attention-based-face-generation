@@ -59,7 +59,7 @@ class MFCCLandmarkCreator():
             for dataset, d_map in u_map.items():
                 for code, lm in d_map.items():
                     mfcc = mfcc_data[utterance][dataset][code]
-                    result.append(((utterance, dataset, code), (mfcc[:116,1:], lm[3])))
+                    result.append(((utterance, dataset, code), (mfcc[:116,1:], lm[3], lm)))
         return result
 
     def __create_dataloader(self, mfcc_path, landmark_path, batchsize):
@@ -68,14 +68,15 @@ class MFCCLandmarkCreator():
         def data_processing(item):
             r = 3
             window = 23
-            (u,d,c), (mfcc, inspired_landmark) = item
+            (u,d,c), (mfcc, inspired_landmark, orig_landmarks) = item
             start_mfcc = (r - 3) * 4
             end_mfcc = (r + window + 3) * 4
             mfcc = mfcc.transpose(1, 0)[:, start_mfcc:end_mfcc]
             mfcc = torch.tensor(mfcc).float().unsqueeze(0)
 
             inspired_landmark = torch.tensor(inspired_landmark).float()
-            return ((u,d,c), (mfcc, inspired_landmark))
+            orig_landmarks = torch.tensor(orig_landmarks).float()
+            return ((u,d,c), (mfcc, inspired_landmark, orig_landmarks))
 
         dataset = ArrayDataset(arr, data_processing)
         params = {
@@ -89,7 +90,7 @@ class MFCCLandmarkCreator():
     def run(self):
         result = {}
         with torch.no_grad():
-            for (u_arr, d_arr, c_arr), (mfcc_arr, inspired_landmark_arr) in tqdm(self.__dataloader):
+            for (u_arr, d_arr, c_arr), (mfcc_arr, inspired_landmark_arr, orig_landmarks) in tqdm(self.__dataloader):
                 mfcc_arr = torch.tensor(mfcc_arr).to(self.__device)
                 inspired_landmark_arr = torch.tensor(inspired_landmark_arr).to(self.__device)
                 batchsize = inspired_landmark_arr.shape[0]
@@ -98,6 +99,9 @@ class MFCCLandmarkCreator():
                 pca_landmarks = torch.matmul(pca_landmarks, self.__landmark_pca_components)
 
                 out_landmarks = self.__model(pca_landmarks, mfcc_arr)
+                full_landmarks = torch.matmul(out_landmarks, self.__landmark_pca_components.transpose(0,1)) + self.__landmark_pca_mean + self.__landmark_mean.flatten()
+                full_landmarks = full_landmarks.detach().to('cpu').numpy()
+                # print(full_landmarks.shape)
                 out_landmarks = out_landmarks.detach().to('cpu').numpy()
 
                 for i in range(batchsize):
@@ -108,13 +112,27 @@ class MFCCLandmarkCreator():
                     if u not in result: result[u] = {}
                     if d not in result[u]: result[u][d] = {}
                     result[u][d][c] = lm
-        with open(self.__output_path, 'wb') as fd:
-            pickle.dump(result, fd)
+                
+                _, axes = plt.subplots(4, 16)
+                for i in range(4):
+                    for j in range(16):
+                        orig = orig_landmarks[i][j]
+                        orig = orig.detach().cpu().numpy()
+                        lm = full_landmarks[i][j]
+                        lm = lm.reshape(68, 2) 
+                        axe = axes[i][j]
+                        axe.scatter(orig[:,0], orig[:,1], c='b', s=1)
+                        axe.scatter(lm[:,0], lm[:,1], c='r', s=1)
+                        axe.axis("off")
+                        axe.invert_yaxis()
+                plt.show()
+        # with open(self.__output_path, 'wb') as fd:
+        #     pickle.dump(result, fd)
 
 
 if __name__ == "__main__":
     creator = MFCCLandmarkCreator(
-        batchsize = 200,
+        batchsize = 10,
         device = "cuda:0",
     )
     creator.run()

@@ -4,14 +4,21 @@ import numpy as np
 from pickle import dump, load
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from facenet_pytorch import MTCNN
 
 class RawFaceDataProcessor(object):
     def __init__(
         self,
         standard_landmark_mean = './preprocessed/standard_landmark_mean.pkl',
+        landmark_predictor = "./shape_predictor_68_face_landmarks.dat",
     ):
         self.__frontal_face_detector = dlib.get_frontal_face_detector()
-        self.__landmark_detector = dlib.shape_predictor("./shape_predictor_68_face_landmarks.dat")
+        self.__face_dectector = MTCNN(
+            select_largest = True,
+            keep_all = False,
+        )
+
+        self.__landmark_detector = dlib.shape_predictor(landmark_predictor)
         self.__standard_landmark_mean = None
         with open(standard_landmark_mean, 'rb') as fd:
             self.__standard_landmark_mean = load(fd)
@@ -86,6 +93,61 @@ class RawFaceDataProcessor(object):
         coords = (coords - center)/wh + 0.5
         face = frame[tl.x:br.x,tl.y:br.y]
         return coords, cv2.resize(face, (128,128))
+
+    def __crop_face_mtcnn(self, frames):
+        _, _, landmarks = self.__face_dectector.detect(frames, landmarks = True)
+
+        tmp_lmark = np.zeros((5, 2))
+        cnt = 0.0
+        for lm in landmarks:
+            if lm is None:
+                continue
+            tmp_lmark += lm[0]
+            cnt += 1.0
+        if cnt < 1:
+            return None
+
+        tmp_lmark = tmp_lmark/cnt
+        left_eye, right_eye, nose, left_mouth, right_mouth = tmp_lmark
+        x_nose, y_nose = nose
+
+        avg_left = (left_eye + left_mouth) / 2.0
+        avg_right = (right_eye + right_mouth) / 2.0
+        d_nose_left, _ = nose - avg_left
+        d_nose_right, _ = avg_right - nose
+        x1 = int(x_nose - 2.2*d_nose_left)
+        x2 = int(x_nose + 2.2*d_nose_right)
+
+        dx = x2 - x1
+        dy = int(dx)
+
+        avg_eye = (left_eye + right_eye) / 2.0
+        avg_mouth = (left_mouth + right_mouth) / 2.0
+        _, d_eyes_nose = nose - avg_eye
+        _, d_nose_mouth = avg_mouth - nose
+        d_nose_y1 = int(dy*(d_eyes_nose/(d_eyes_nose + d_nose_mouth)))
+        d_nose_y2 = dy - d_nose_y1
+        y1 = int(y_nose - d_nose_y1)
+        y2 = int(y_nose + d_nose_y2)
+        frames = frames[:,y1:y2,x1:x2,:]
+        return frames
+
+    def frame_normalize(self, frame):
+        rect = self.__frontal_face_detector(frame, 1)
+        landmark, face = self.__detect_landmark(frame, rect[0])
+        eyecorner_src  = [ (landmark[36, 0], landmark[36, 1]), (landmark[45, 0], landmark[45, 1]) ]
+        eyecorner_dst = [ (np.float(0.3), np.float(1/3)), (np.float(0.7), np.float(1/3)) ]
+        transform, _ = self.__similarity_transform(eyecorner_src, eyecorner_dst)
+        landmark = self.__transform_landmark(landmark, transform)
+        landmark_trans = landmark[27:48,:]
+        mean_landmark_trans = self.__standard_landmark_mean[27:48,:]
+        transformation, _ = cv2.estimateAffinePartial2D(landmark_trans, mean_landmark_trans, False)
+        frame = cv2.warpAffine(frame, transformation, frame.shape[:2])
+        rect = self.__frontal_face_detector(frame, 1)
+        frames = self.__crop_face_mtcnn(np.expand_dims(frame, 0))
+
+        frame = cv2.resize(frames[0], (128,128))
+        return self.__standard_landmark_mean, frame
 
     def align_eye_points(self, landmark_sequence):
         aligned_sequence = copy.deepcopy(landmark_sequence)
@@ -220,9 +282,9 @@ class RawFaceData(object):
                     ltrb = video_metadata['ltrb']
                     landmarks = video_metadata['landmark']
 
-                    if ltrb is not None and landmarks is not None and len(landmarks) == 29:
-                        print(f"{video_path} have been processed, by pass")
-                        continue
+                    # if ltrb is not None and landmarks is not None and len(landmarks) == 29:
+                    #     print(f"{video_path} have been processed, by pass")
+                    #     continue
                     try:
                         frames = self.__video_frames(video_path)
                         if frames is None:
@@ -232,10 +294,19 @@ class RawFaceData(object):
                         if ltrb is not None:
                             avg_rect = dlib.rectangle(*ltrb)
                         _, landmarks, ltrb = self.__processor.crop_face(frames, avg_rect)
-                        landmarks = self.__processor.align_nose_mouth(landmarks)
-                        landmarks = self.__processor.replace_landmark_boundary(landmarks)
+                        lm = landmarks[27] + np.array([1,0])
+                        plt.figure()
+                        plt.scatter(lm[:,0], lm[:,1], c='b')
                         video_metadata['ltrb'] = ltrb
                         video_metadata['landmark'] = landmarks
+
+                        landmarks = self.__processor.align_nose_mouth(landmarks)
+                        landmarks = self.__processor.replace_landmark_boundary(landmarks)
+                        lm = landmarks[27]
+                        plt.scatter(lm[:,0], lm[:,1], c='r')
+                        plt.gca().invert_yaxis()
+                        plt.show()
+                        plt.close()
                     except Exception:
                         traceback.print_exc(file=sys.stdout)
                     cnt += 1
@@ -243,7 +314,7 @@ class RawFaceData(object):
                         print(f"count = {cnt}, backup")
                         self.__produce_file()
         print("done")
-        self.__produce_file()
+        # self.__produce_file()
 
 
 def main():

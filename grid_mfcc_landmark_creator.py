@@ -13,7 +13,7 @@ class MFCCLandmarkCreator():
     def __init__(self,
         batchsize = 200,
         landmark_features = 7,
-        model_path = "./model/landmark_decoder.pt",
+        model_path = "./model/grid/landmark_decoder.pt",
         landmark_pca_path = "./grid_dataset/preprocessed/landmark_pca.pkl",
         landmark_mean_path = "./grid_dataset/preprocessed/standard_landmark_mean.pkl",
         landmark_path = "/media/tuantran/raid-data/dataset/GRID/standard_landmark.pkl",
@@ -118,7 +118,7 @@ class MFCCLandmarkCreator():
     def start(self):
         data = {}
         with torch.no_grad():
-            for (identities, codes), (mfcc, inspired_landmark), _ in tqdm(self.__produce_data()):
+            for (identities, codes), (mfcc, inspired_landmark), y in tqdm(self.__produce_data()):
                 for i in range(len(identities)):
                     identity = identities[i]
                     code = codes[i]
@@ -126,14 +126,30 @@ class MFCCLandmarkCreator():
                     i_inspired_landmark = inspired_landmark[i]
                     pca_landmarks = torch.matmul(i_inspired_landmark - self.__landmark_pca_mean, self.__landmark_pca_components.transpose(0,1))
                     yhat = self.__model(pca_landmarks, i_mfcc)
+                    yhat_full = torch.matmul(yhat, self.__landmark_pca_components) + self.__landmark_pca_mean
+                    yhat_full = yhat_full.detach().cpu().numpy()
                     yhat = yhat.detach().cpu().numpy()
                     yhat = np.float32(yhat)
                     if identity not in data:
                         data[identity] = {}
                     data[identity][code] = yhat
+                    
+                    i_y = y[i].detach().cpu().numpy()
+                    _, axes = plt.subplots(4, 16)
+                    for i in range(4):
+                        for j in range(16):
+                            lm = yhat_full[i][j]
+                            lm = lm.reshape(68, 2) + self.__landmark_mean
+                            orig = i_y[i][j].reshape(68,2) + self.__landmark_mean
+                            axe = axes[i][j]
+                            axe.scatter(orig[:,0], orig[:,1], c='b', s=1)
+                            axe.scatter(lm[:,0], lm[:,1], c='r', s=1)
+                            axe.axis("off")
+                            axe.invert_yaxis()
+                    plt.show()
 
-        with open(self.__output_path, 'wb') as fd:
-            pickle.dump(data, fd)
+        # with open(self.__output_path, 'wb') as fd:
+        #     pickle.dump(data, fd)
 
 if __name__ == "__main__":
     trainer = MFCCLandmarkCreator(device = "cuda:0")

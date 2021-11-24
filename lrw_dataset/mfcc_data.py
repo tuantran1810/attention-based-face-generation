@@ -9,7 +9,8 @@ class MFCCProcessor():
         self.__sampling_rate = sampling_rate
 
     def to_mfcc(self, audio):
-        audio = np.append(audio, np.zeros(self.__sampling_rate//100))
+        audio = np.append(audio, np.zeros(self.__sampling_rate))
+        audio = np.append(np.zeros(960), audio)
         mfcc = python_speech_features.mfcc(audio, self.__sampling_rate, winstep = 0.01)
         return mfcc
 

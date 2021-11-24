@@ -63,11 +63,12 @@ class LandmarkPredictorTrainer():
             self.__produce_train_data
         ).inject_test_dataloader(
             self.__produce_test_data
-        ).inject_evaluation_callback(
-            self.__save_evaluation_data
-        ).inject_save_model_callback(
-            self.__save_model
         )
+        # .inject_evaluation_callback(
+        #     self.__save_evaluation_data
+        # ).inject_save_model_callback(
+        #     self.__save_model
+        # )
 
     def __create_dataloader(self, landmarkpath, mfccpath, batchsize, training_percentage = 95):
         landmark_data = None

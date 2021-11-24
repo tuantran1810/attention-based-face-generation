@@ -255,7 +255,6 @@ class GansTrainer():
                         fake_images
                     )
                     i += 1
-                    break
 
                 metrics = {
                     "pixel_loss": sum(pixel_loss_arr)/cnt,
